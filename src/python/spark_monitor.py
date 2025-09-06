@@ -5,10 +5,11 @@ import sys
 import os
 
 # Add the modules directory to the path
-sys.path.append(os.path.dirname(__file__))
+modules_path = os.path.join(os.path.dirname(__file__), 'modules')
+sys.path.insert(0, modules_path)
 
 # Import and run the main application
-from modules.main import main
+from main import main
 
 if __name__ == "__main__":
     main()

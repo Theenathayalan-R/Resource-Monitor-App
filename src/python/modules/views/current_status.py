@@ -6,15 +6,15 @@ from datetime import datetime
 import pandas as pd
 import streamlit as st
 
-from ..utils import (
+from utils import (
     classify_spark_pods,
     get_pod_resources,
     extract_app_name,
     format_resource_value,
     calculate_utilization,
 )
-from ..mock_data import generate_mock_pods, generate_mock_metrics
-from ..kubernetes_client import KubernetesClient
+from mock_data import generate_mock_pods, generate_mock_metrics
+from kubernetes_client import KubernetesClient
 
 
 def render_current_status(namespace: str, api_server_url: str, token: str | None, history_manager, demo_mode: bool, refresh_interval: int, auto_refresh: bool):
@@ -148,7 +148,7 @@ def render_current_status(namespace: str, api_server_url: str, token: str | None
             chart_data = {**resources, **m}
 
             # Create detailed chart
-            from ..charts import create_resource_chart
+            from charts import create_resource_chart
             fig = create_resource_chart(chart_data, f"Resource Utilization - {selected_driver}")
             st.plotly_chart(fig, use_container_width=True)
 

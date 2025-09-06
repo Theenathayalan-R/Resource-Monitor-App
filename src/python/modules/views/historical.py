@@ -6,7 +6,7 @@ import pandas as pd
 import streamlit as st
 from datetime import datetime, timedelta
 
-from ..charts import create_application_summary_chart, create_historical_timeline_chart
+from charts import create_application_summary_chart, create_historical_timeline_chart
 
 
 def render_historical(namespace: str, history_manager, demo_mode: bool):
@@ -15,7 +15,7 @@ def render_historical(namespace: str, history_manager, demo_mode: bool):
     # Time range selection
     col1, col2 = st.columns(2)
     with col1:
-        from ..config import TIME_RANGES
+        from config import TIME_RANGES
         hours_back = st.selectbox("Time Range", TIME_RANGES, index=3)
     with col2:
         app_filter = st.text_input("Filter by App Name (optional)")
