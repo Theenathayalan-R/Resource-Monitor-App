@@ -210,6 +210,7 @@ graph TD
 - Historical Analysis: Aggregations and trends (memory in MiB)
 - Pod Timeline: Per-pod history and events
 - Export Data: JSON/CSV export with inclusive end date
+- Demo Mode: Enable “Use mock data (demo)” in the sidebar to populate the UI with realistic sample Spark driver/executor pods and metrics. Use “Seed demo data now” to write a snapshot into the local SQLite DB so Historical Analysis and Timeline views also have data.
 
 ## 🧪 Testing
 
@@ -230,3 +231,13 @@ python -m unittest discover tests -v
 
 - If Metrics API is unavailable, the app will display zero usage values and a warning banner.
 - On SQLite locking errors, ensure a single writer and that the app runs with default WAL mode.
+
+## 🧩 Developer Guide
+
+See docs/DEVELOPER_GUIDE.md for:
+- Architecture overview and module responsibilities
+- Local setup and secrets
+- Demo Mode usage and seeding
+- Coding style and adding new views
+- Testing commands
+- Release checklist
