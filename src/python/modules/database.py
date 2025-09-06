@@ -234,17 +234,23 @@ class HistoryManager:
 
             normalized_items = [normalize_and_validate(item) for item in items]
             
+            # Add current timestamp to each normalized item
+            timestamp_now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            items_with_timestamp = [
+                (timestamp_now,) + item for item in normalized_items
+            ]
+            
             with self._get_connection() as conn:
                 cursor = conn.cursor()
                 cursor.executemany('''
                     INSERT INTO pod_history
-                    (namespace, pod_name, pod_type, app_name, status,
+                    (timestamp, namespace, pod_name, pod_type, app_name, status,
                      cpu_request, cpu_limit, cpu_usage,
                      memory_request, memory_limit, memory_usage,
                      node_name, creation_timestamp, labels, annotations,
                      container_restarts, is_active)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
-                ''', normalized_items)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+                ''', items_with_timestamp)
                 
                 logger.info(f"Successfully stored {len(normalized_items)} pod records in batch operation")
                 

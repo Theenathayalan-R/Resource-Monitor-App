@@ -1,6 +1,6 @@
-# 🔥 Spark Pod Resource Monitor
+# 🔥 Spark Pod Resource Monitor for OpenShift
 
-A **production-ready**, enterprise-grade Streamlit application for monitoring Apache Spark applications on OpenShift/Kubernetes. Features comprehensive error handling, performance optimization, input validation, and extensive testing coverage.
+A **production-ready**, enterprise-grade Streamlit application for monitoring Apache Spark applications on **Red Hat OpenShift** and Kubernetes clusters. Features comprehensive error handling, performance optimization, input validation, and extensive testing coverage.
 
 [![Test Status](https://img.shields.io/badge/tests-29%2F29%20passing-brightgreen)](test_runner.py)
 [![Production Ready](https://img.shields.io/badge/production-ready-brightgreen)](#production-deployment)
@@ -137,7 +137,7 @@ graph TB
         METRICS[System Metrics]
     end
     
-    subgraph "☸️ Kubernetes Integration"
+    subgraph "☸️ OpenShift/Kubernetes Integration"
         K8S[Kubernetes API Client]
         PODS[Pod Discovery]
         BATCH[Batch Metrics API]
@@ -261,8 +261,8 @@ streamlit>=1.28.0,<1.42.0        # Web application framework
 plotly>=5.15.0,<6.0.0            # Interactive charts and graphs
 pandas>=2.0.0,<3.0.0             # Data manipulation and analysis
 
-# Kubernetes Integration
-kubernetes>=27.2.0,<34.0.0       # Official Kubernetes Python client
+# OpenShift/Kubernetes Integration
+kubernetes>=27.2.0,<34.0.0       # Official Kubernetes Python client (compatible with OpenShift)
 PyYAML>=6.0,<7.0                 # YAML parsing for kubeconfig
 requests>=2.31.0,<3.0.0          # HTTP client with security updates
 
@@ -292,7 +292,37 @@ pip install memory-profiler>=0.61.0
 
 ## 🚀 Quick Start Installation
 
-### Option 1: Automated Setup (Recommended)
+### Option 1: Automated Setup with install.sh (Recommended)
+
+The **one-command installation** script handles everything automatically:
+
+```bash
+# Clone the repository
+git clone https://github.com/Theenathayalan-R/Resource-Monitor-App.git
+cd Resource-Monitor-App
+
+# Run the automated installation script (handles everything!)
+chmod +x install.sh
+./install.sh
+```
+
+**✨ What install.sh does:**
+- ✅ **Environment Setup**: Creates and activates `spark-monitor-env` virtual environment
+- ✅ **Dependency Installation**: Installs all required packages from `requirements.txt`
+- ✅ **Development Tools**: Installs pytest, coverage tools, memory profiler, watchdog
+- ✅ **Verification**: Tests all package imports and core functionality  
+- ✅ **Comprehensive Testing**: Runs all 29 tests to ensure everything works
+- ✅ **Project Structure**: Sets up logs directory and configuration
+- ✅ **Ready to Use**: Provides clear next steps and usage instructions
+
+After successful installation:
+```bash
+# Start the application
+./run.sh
+# Application available at: http://localhost:8502
+```
+
+### Option 2: Manual Setup
 
 ```bash
 # Clone the repository
@@ -318,7 +348,7 @@ python test_runner.py
 
 **🎉 Success!** Application will be available at: http://localhost:8502
 
-### Option 2: Docker Deployment
+### Option 3: Docker Deployment
 
 ```bash
 # Build production-ready Docker image
@@ -338,14 +368,17 @@ docker run -d \
 docker logs -f spark-monitor
 ```
 
-### Option 3: Development Setup
+### Option 4: Development Setup
 
 ```bash
 # Clone and setup for development
 git clone https://github.com/Theenathayalan-R/Resource-Monitor-App.git
 cd Resource-Monitor-App
 
-# Create development environment with optional packages
+# Use install.sh for development setup too
+./install.sh
+
+# Or manual development environment with optional packages
 python -m venv dev-env
 source dev-env/bin/activate
 pip install -r requirements.txt
@@ -540,23 +573,23 @@ GARBAGE_COLLECTION_INTERVAL=300
 MAX_CACHED_RESULTS=100
 ```
 
-### Kubernetes Authentication Methods
+### OpenShift/Kubernetes Authentication Methods
 
 #### Method 1: Service Account Token (Production Recommended)
 
 ```bash
 # Create dedicated service account
-kubectl create namespace spark-monitoring
-kubectl create serviceaccount spark-monitor -n spark-monitoring
+oc create namespace spark-monitoring
+oc create serviceaccount spark-monitor -n spark-monitoring
 
 # Apply RBAC permissions (use the YAML from Prerequisites section)
-kubectl apply -f rbac-permissions.yaml
+oc apply -f rbac-permissions.yaml
 
 # Get the service account token
-kubectl create token spark-monitor -n spark-monitoring --duration=8760h  # 1 year
+oc create token spark-monitor -n spark-monitoring --duration=8760h  # 1 year
 
 # For older Kubernetes versions (< 1.24):
-kubectl get secret $(kubectl get serviceaccount spark-monitor -n spark-monitoring -o jsonpath='{.secrets[0].name}') -n spark-monitoring -o jsonpath='{.data.token}' | base64 --decode
+oc get secret $(oc get serviceaccount spark-monitor -n spark-monitoring -o jsonpath='{.secrets[0].name}') -n spark-monitoring -o jsonpath='{.data.token}' | base64 --decode
 ```
 
 #### Method 2: OpenShift Login Token
@@ -576,10 +609,10 @@ oc whoami -t
 ```bash
 # Use existing kubeconfig (development environments)
 export KUBECONFIG=~/.kube/config
-kubectl config current-context
+oc config current-context
 
 # Extract specific cluster config
-kubectl config view --minify --flatten > cluster-config.yaml
+oc config view --minify --flatten > cluster-config.yaml
 ```
 
 ### Token Security Best Practices
@@ -1261,21 +1294,21 @@ spec:
               number: 80
 ```
 
-#### **Deploy to Kubernetes**
+#### **Deploy to OpenShift/Kubernetes**
 ```bash
 # Apply RBAC permissions first
-kubectl apply -f rbac-permissions.yaml
+oc apply -f rbac-permissions.yaml
 
 # Deploy application
-kubectl apply -f namespace.yaml
-kubectl apply -f serviceaccount.yaml
-kubectl apply -f deployment.yaml
-kubectl apply -f service.yaml
-kubectl apply -f ingress.yaml
+oc apply -f namespace.yaml
+oc apply -f serviceaccount.yaml
+oc apply -f deployment.yaml
+oc apply -f service.yaml
+oc apply -f ingress.yaml
 
 # Verify deployment
-kubectl get pods -n spark-monitoring
-kubectl logs -f deployment/spark-pod-monitor -n spark-monitoring
+oc get pods -n spark-monitoring
+oc logs -f deployment/spark-pod-monitor -n spark-monitoring
 ```
 
 ### 📊 **Production Monitoring**
@@ -1308,25 +1341,25 @@ spec:
 #### **Health Monitoring**
 ```bash
 # Check application health
-kubectl exec -n spark-monitoring deployment/spark-pod-monitor -- \
+oc exec -n spark-monitoring deployment/spark-pod-monitor -- \
   curl -f http://localhost:8502/_stcore/health
 
 # Check database health
-kubectl exec -n spark-monitoring deployment/spark-pod-monitor -- \
+oc exec -n spark-monitoring deployment/spark-pod-monitor -- \
   python -c "from src.python.modules.database import HistoryManager; print('DB OK')"
 
 # View application logs
-kubectl logs -n spark-monitoring deployment/spark-pod-monitor --tail=100
+oc logs -n spark-monitoring deployment/spark-pod-monitor --tail=100
 ```
 
 #### **Backup & Recovery**
 ```bash
 # Database backup
-kubectl exec -n spark-monitoring deployment/spark-pod-monitor -- \
+oc exec -n spark-monitoring deployment/spark-pod-monitor -- \
   sqlite3 /app/data/spark_pods_history.db ".backup /app/data/backup-$(date +%Y%m%d).db"
 
 # Configuration backup
-kubectl get configmap,secret -n spark-monitoring -o yaml > backup-config.yaml
+oc get configmap,secret -n spark-monitoring -o yaml > backup-config.yaml
 ```
 
 ### 📈 **Scaling Considerations**
@@ -1416,11 +1449,19 @@ This application has been thoroughly tested and optimized for production environ
 ```bash
 git clone https://github.com/Theenathayalan-R/Resource-Monitor-App.git
 cd Resource-Monitor-App
-python test_runner.py  # Verify all tests pass
+./install.sh           # One-command installation with testing
 ./run.sh               # Start monitoring!
 ```
 
+### 🔴 **OpenShift & Red Hat Integration**
+
+This application is **optimized for Red Hat OpenShift** environments:
+- ✅ **Native OpenShift CLI Support**: All examples use `oc` commands
+- ✅ **OpenShift Authentication**: Built-in support for OpenShift token-based auth
+- ✅ **Red Hat Certified**: Compatible with Red Hat OpenShift Container Platform
+- ✅ **Enterprise Features**: Service accounts, RBAC, and security contexts
+
 ---
 
-*Last Updated: September 6, 2025*  
-*Version: 1.0.0 - Production Ready*
+*Last Updated: September 7, 2025*  
+*Version: 1.0.0 - Production Ready with OpenShift Integration*
