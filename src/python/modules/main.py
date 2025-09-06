@@ -8,12 +8,37 @@ import sqlite3
 import time
 from datetime import datetime, timedelta
 
+# Page config
+from .config import (
+    PAGE_ICON,
+    PAGE_TITLE,
+    HISTORY_RETENTION_DAYS,
+    DEFAULT_API_SERVER,
+    DEFAULT_NAMESPACE,
+    DEFAULT_REFRESH_INTERVAL,
+    VIEW_MODES,
+    TIME_RANGES,
+    EXPORT_FORMATS,
+    LAYOUT,
+)
+
+st.set_page_config(page_title=PAGE_TITLE, page_icon=PAGE_ICON, layout=LAYOUT)
+
 # Import our modules
-from .config import *
 from .database import HistoryManager
 from .kubernetes_client import KubernetesClient
-from .utils import *
-from .charts import *
+from .utils import (
+    classify_spark_pods,
+    get_pod_resources,
+    extract_app_name,
+    format_resource_value,
+    calculate_utilization,
+)
+from .charts import (
+    create_resource_chart,
+    create_historical_timeline_chart,
+    create_application_summary_chart,
+)
 
 
 def main():
@@ -48,10 +73,18 @@ def main():
         help="Upload your kubeconfig file or token file"
     )
 
-    # Manual token input as alternative
-    manual_token = st.sidebar.text_area(
+    # Option to use Streamlit secrets
+    secret_token = None
+    try:
+        secret_token = st.secrets.get("KUBE_TOKEN", None)
+    except Exception:
+        secret_token = None
+    use_secret = st.sidebar.checkbox("Use token from secrets", value=bool(secret_token))
+
+    # Manual token input as alternative (masked)
+    manual_token = st.sidebar.text_input(
         "Or paste token manually:",
-        height=100,
+        type="password",
         help="Paste your service account token here"
     )
 
@@ -63,12 +96,13 @@ def main():
     auto_refresh = st.sidebar.checkbox("Auto-refresh", value=True)
     refresh_interval = st.sidebar.slider("Refresh interval (seconds)", 10, 300, DEFAULT_REFRESH_INTERVAL)
 
-    # View mode selection
-    view_mode = st.sidebar.selectbox("View Mode", VIEW_MODES)
-
-    # Extract token
+    # Extract token before rendering view mode widget
     token = None
-    if uploaded_token is not None:
+
+    if use_secret and secret_token:
+        token = secret_token
+
+    if not token and uploaded_token is not None:
         try:
             content = uploaded_token.read().decode('utf-8')
             if uploaded_token.name.endswith('.txt'):
@@ -83,22 +117,24 @@ def main():
         except Exception as e:
             st.sidebar.error(f"Error reading token file: {str(e)}")
 
-    elif manual_token.strip():
+    if not token and manual_token.strip():
         token = manual_token.strip()
 
-    if not token and view_mode == "Current Status":
-        st.warning("Please provide a valid kubeconfig token to connect to the cluster for real-time monitoring.")
-        st.info("""
-        To get your token:
-        1. Login to OpenShift: `oc login`
-        2. Get token: `oc whoami -t`
-        3. Or create service account and get its token
-        """)
-        if view_mode != "Historical Analysis":
-            return
+    # Ensure view_mode exists in session state and adjust prior to widget creation
+    if 'view_mode' not in st.session_state:
+        st.session_state['view_mode'] = VIEW_MODES[0]
+    if not token and st.session_state['view_mode'] == "Current Status":
+        st.session_state['view_mode'] = "Historical Analysis"
+
+    # View mode selection (after session_state adjustment above)
+    st.sidebar.selectbox("View Mode", VIEW_MODES, key="view_mode")
+    view_mode = st.session_state['view_mode']
 
     # Current Status Mode
     if view_mode == "Current Status":
+        if not token:
+            st.warning("Please provide a valid token to use Current Status mode.")
+            return
         # Initialize Kubernetes client
         if 'k8s_client' not in st.session_state or st.sidebar.button("Reconnect"):
             with st.spinner("Connecting to cluster..."):
@@ -112,12 +148,20 @@ def main():
         k8s_client = st.session_state.k8s_client
 
         # Fetch and store current pods data
+        start_time = time.time()
         with st.spinner("Fetching pods and storing history..."):
             try:
                 pods = k8s_client.get_pods(namespace)
                 drivers, executors = classify_spark_pods(pods)
 
-                # Store current pod data in history
+                # Batch metrics retrieval for namespace
+                metrics_map = k8s_client.get_namespace_pod_metrics(namespace)
+                metrics_available = bool(metrics_map)
+                if not metrics_available:
+                    st.warning("Metrics API unavailable; showing zeros for usage values.")
+
+                # Prepare batch insert
+                batch_items = []
                 active_pod_names = []
                 for pod in pods:
                     app_name = extract_app_name(pod.metadata.name)
@@ -125,12 +169,20 @@ def main():
 
                     if pod_type != 'unknown':
                         resources = get_pod_resources(pod)
-                        metrics = k8s_client.get_pod_metrics(namespace, pod.metadata.name)
-
-                        history_manager.store_pod_data(
-                            namespace, pod, pod_type, app_name, resources, metrics
-                        )
+                        m = metrics_map.get(pod.metadata.name, {'cpu_usage': 0.0, 'memory_usage': 0.0})
+                        batch_items.append((
+                            namespace, pod.metadata.name, pod_type, app_name, pod.status.phase,
+                            resources['cpu_request'], resources['cpu_limit'], m['cpu_usage'],
+                            resources['memory_request'], resources['memory_limit'], m['memory_usage'],
+                            getattr(pod.spec, 'node_name', None), getattr(pod.metadata, 'creation_timestamp', None),
+                            dict(pod.metadata.labels or {}), dict(pod.metadata.annotations or {}),
+                            sum(getattr(cs, 'restart_count', 0) for cs in (getattr(pod.status, 'container_statuses', []) or []))
+                        ))
                         active_pod_names.append(pod.metadata.name)
+
+                # Store batch
+                if batch_items:
+                    history_manager.store_pod_data_batch(batch_items)
 
                 # Mark inactive pods
                 history_manager.mark_pods_inactive(namespace, active_pod_names)
@@ -139,8 +191,10 @@ def main():
                 st.error(f"Error fetching pod data: {str(e)}")
                 return
 
+        fetch_duration = time.time() - start_time
+
         # Display current status
-        col1, col2, col3, col4 = st.columns(4)
+        col1, col2, col3, col4, col5 = st.columns(5)
         with col1:
             st.metric("Total Pods", len(pods))
         with col2:
@@ -149,6 +203,8 @@ def main():
             st.metric("Executor Pods", len(executors))
         with col4:
             st.metric("Last Updated", datetime.now().strftime("%H:%M:%S"))
+        with col5:
+            st.metric("Fetch Duration", f"{fetch_duration:.2f}s")
 
         # Database statistics
         db_stats = history_manager.get_database_stats()
@@ -166,17 +222,17 @@ def main():
             driver_data = []
             for driver in drivers:
                 resources = get_pod_resources(driver)
-                metrics = k8s_client.get_pod_metrics(namespace, driver.metadata.name)
+                m = metrics_map.get(driver.metadata.name, {'cpu_usage': 0.0, 'memory_usage': 0.0})
 
                 driver_data.append({
                     'Driver Name': driver.metadata.name,
                     'Status': driver.status.phase,
                     'CPU Request': format_resource_value(resources['cpu_request'], 'cpu'),
                     'CPU Limit': format_resource_value(resources['cpu_limit'], 'cpu'),
-                    'CPU Usage': format_resource_value(metrics['cpu_usage'], 'cpu'),
-                    'Memory Request (MB)': format_resource_value(resources['memory_request'], 'memory'),
-                    'Memory Limit (MB)': format_resource_value(resources['memory_limit'], 'memory'),
-                    'Memory Usage (MB)': format_resource_value(metrics['memory_usage'], 'memory'),
+                    'CPU Usage': format_resource_value(m['cpu_usage'], 'cpu'),
+                    'Memory Request (MiB)': format_resource_value(resources['memory_request'], 'memory'),
+                    'Memory Limit (MiB)': format_resource_value(resources['memory_limit'], 'memory'),
+                    'Memory Usage (MiB)': format_resource_value(m['memory_usage'], 'memory'),
                     'Created': driver.metadata.creation_timestamp.strftime("%Y-%m-%d %H:%M:%S") if driver.metadata.creation_timestamp else "Unknown"
                 })
 
@@ -197,9 +253,9 @@ def main():
 
                 # Get detailed info
                 resources = get_pod_resources(selected_driver_obj)
-                metrics = k8s_client.get_pod_metrics(namespace, selected_driver)
+                m = metrics_map.get(selected_driver, {'cpu_usage': 0.0, 'memory_usage': 0.0})
 
-                chart_data = {**resources, **metrics}
+                chart_data = {**resources, **m}
 
                 # Create detailed chart
                 fig = create_resource_chart(chart_data, f"Resource Utilization - {selected_driver}")
@@ -215,19 +271,22 @@ def main():
                     executor_data = []
                     for executor in associated_executors:
                         exec_resources = get_pod_resources(executor)
-                        exec_metrics = k8s_client.get_pod_metrics(namespace, executor.metadata.name)
+                        exec_m = metrics_map.get(executor.metadata.name, {'cpu_usage': 0.0, 'memory_usage': 0.0})
+
+                        cpu_util = calculate_utilization(exec_m['cpu_usage'], exec_resources['cpu_limit']) if exec_resources['cpu_limit'] > 0 else 0.0
+                        mem_util = calculate_utilization(exec_m['memory_usage'], exec_resources['memory_limit'], 1) if exec_resources['memory_limit'] > 0 else 0.0
 
                         executor_data.append({
                             'Executor Name': executor.metadata.name,
                             'Status': executor.status.phase,
-                            'CPU Usage': format_resource_value(exec_metrics['cpu_usage'], 'cpu'),
+                            'CPU Usage': format_resource_value(exec_m['cpu_usage'], 'cpu'),
                             'CPU Request': format_resource_value(exec_resources['cpu_request'], 'cpu'),
                             'CPU Limit': format_resource_value(exec_resources['cpu_limit'], 'cpu'),
-                            'Memory Usage (MB)': format_resource_value(exec_metrics['memory_usage'], 'memory'),
-                            'Memory Request (MB)': format_resource_value(exec_resources['memory_request'], 'memory'),
-                            'Memory Limit (MB)': format_resource_value(exec_resources['memory_limit'], 'memory'),
-                            'CPU Utilization %': f"{calculate_utilization(exec_metrics['cpu_usage'], exec_resources['cpu_limit']):.1f}%",
-                            'Memory Utilization %': f"{calculate_utilization(exec_metrics['memory_usage'], exec_resources['memory_limit'], 1):.1f}%"
+                            'Memory Usage (MiB)': format_resource_value(exec_m['memory_usage'], 'memory'),
+                            'Memory Request (MiB)': format_resource_value(exec_resources['memory_request'], 'memory'),
+                            'Memory Limit (MiB)': format_resource_value(exec_resources['memory_limit'], 'memory'),
+                            'CPU Utilization %': f"{cpu_util:.1f}%" if exec_resources['cpu_limit'] > 0 else 'N/A',
+                            'Memory Utilization %': f"{mem_util:.1f}%" if exec_resources['memory_limit'] > 0 else 'N/A'
                         })
 
                     executor_df = pd.DataFrame(executor_data)
@@ -238,8 +297,15 @@ def main():
 
     # Auto-refresh for current status mode
     if view_mode == "Current Status" and auto_refresh:
-        time.sleep(refresh_interval)
-        st.experimental_rerun()
+        # Prefer st.autorefresh when available
+        if hasattr(st, 'autorefresh'):
+            st.autorefresh(interval=refresh_interval * 1000, key="auto_refresh_timer")
+        else:
+            time.sleep(refresh_interval)
+            try:
+                st.rerun()
+            except Exception:
+                st.experimental_rerun()
 
     # Historical Analysis Mode
     elif view_mode == "Historical Analysis":
@@ -276,7 +342,7 @@ def main():
                 'memory_usage': 'mean',
                 'is_active': 'sum'
             }).round(2)
-            app_summary.columns = ['Total Pods', 'Avg CPU Usage', 'Avg Memory Usage', 'Active Pods']
+            app_summary.columns = ['Total Pods', 'Avg CPU Usage', 'Avg Memory Usage (MiB)', 'Active Pods']
             st.dataframe(app_summary, use_container_width=True)
 
             # Resource usage trends
@@ -323,7 +389,7 @@ def main():
                         st.metric("Avg CPU Usage", f"{avg_cpu:.2f}")
                     with col3:
                         avg_mem = pod_df['memory_usage'].mean()
-                        st.metric("Avg Memory Usage", f"{avg_mem:.0f} MB")
+                        st.metric("Avg Memory Usage", f"{avg_mem:.0f} MiB")
                 else:
                     st.info(f"No timeline data found for pod: {selected_pod}")
         else:

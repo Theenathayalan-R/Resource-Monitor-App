@@ -18,6 +18,10 @@ PAGE_TITLE = "Spark Pod Resource Monitor"
 PAGE_ICON = "🔥"
 LAYOUT = "wide"
 
+# Security settings
+# Prefer secure TLS by default; allow opting out via env var (not recommended)
+TLS_VERIFY = os.getenv('TLS_VERIFY', 'true').lower() in ('1', 'true', 'yes')
+
 # View modes
 VIEW_MODES = ["Current Status", "Historical Analysis", "Pod Timeline", "Export Data"]
 

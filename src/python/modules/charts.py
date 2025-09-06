@@ -33,25 +33,26 @@ def create_resource_chart(pod_data, title):
         row=1, col=1
     )
 
-    # Memory bar chart
+    # Memory bar chart (MiB)
     fig.add_trace(
-        go.Bar(name='Memory Request', x=['Memory'], y=[pod_data['memory_request']],
+        go.Bar(name='Memory Request (MiB)', x=['Memory'], y=[pod_data['memory_request']],
                marker_color='lightgreen', opacity=0.7, showlegend=False),
         row=1, col=2
     )
     fig.add_trace(
-        go.Bar(name='Memory Limit', x=['Memory'], y=[pod_data['memory_limit']],
+        go.Bar(name='Memory Limit (MiB)', x=['Memory'], y=[pod_data['memory_limit']],
                marker_color='green', opacity=0.7, showlegend=False),
         row=1, col=2
     )
     fig.add_trace(
-        go.Bar(name='Memory Usage', x=['Memory'], y=[pod_data['memory_usage']],
+        go.Bar(name='Memory Usage (MiB)', x=['Memory'], y=[pod_data['memory_usage']],
                marker_color='orange', showlegend=False),
         row=1, col=2
     )
 
     # CPU utilization gauge
-    cpu_util = (pod_data['cpu_usage'] / max(pod_data['cpu_limit'], 0.1)) * 100
+    limit_cpu = max(pod_data['cpu_limit'], 0.0)
+    cpu_util = (pod_data['cpu_usage'] / (limit_cpu if limit_cpu > 0 else 0.1)) * 100
     fig.add_trace(
         go.Indicator(
             mode="gauge+number+delta",
@@ -77,7 +78,8 @@ def create_resource_chart(pod_data, title):
     )
 
     # Memory utilization gauge
-    mem_util = (pod_data['memory_usage'] / max(pod_data['memory_limit'], 1)) * 100
+    limit_mem = max(pod_data['memory_limit'], 0.0)
+    mem_util = (pod_data['memory_usage'] / (limit_mem if limit_mem > 0 else 1)) * 100
     fig.add_trace(
         go.Indicator(
             mode="gauge+number+delta",
@@ -141,12 +143,12 @@ def create_historical_timeline_chart(historical_df, pod_name):
     # Memory timeline
     fig.add_trace(
         go.Scatter(x=historical_df['timestamp'], y=historical_df['memory_usage'],
-                  mode='lines+markers', name='Memory Usage', line=dict(color='orange')),
+                  mode='lines+markers', name='Memory Usage (MiB)', line=dict(color='orange')),
         row=2, col=1
     )
     fig.add_trace(
         go.Scatter(x=historical_df['timestamp'], y=historical_df['memory_limit'],
-                  mode='lines', name='Memory Limit', line=dict(color='green', dash='dash')),
+                  mode='lines', name='Memory Limit (MiB)', line=dict(color='green', dash='dash')),
         row=2, col=1
     )
 
@@ -158,7 +160,7 @@ def create_historical_timeline_chart(historical_df, pod_name):
     )
 
     fig.update_yaxes(title_text="CPU Cores", row=1, col=1)
-    fig.update_yaxes(title_text="Memory (MB)", row=2, col=1)
+    fig.update_yaxes(title_text="Memory (MiB)", row=2, col=1)
 
     return fig
 
@@ -187,7 +189,7 @@ def create_application_summary_chart(historical_df):
     )
     fig.add_trace(
         go.Bar(x=app_summary.index, y=app_summary['memory_usage'],
-               name='Avg Memory Usage', marker_color='orange'),
+               name='Avg Memory Usage (MiB)', marker_color='orange'),
         row=1, col=1
     )
 

@@ -5,6 +5,8 @@ import unittest
 from unittest.mock import Mock
 from modules.utils import (
     parse_resource_quantity,
+    parse_cpu_quantity,
+    parse_memory_quantity,
     classify_spark_pods,
     get_pod_resources,
     extract_app_name,
@@ -23,7 +25,7 @@ class TestUtils(unittest.TestCase):
         self.assertEqual(parse_resource_quantity('500m'), 0.5)
         self.assertEqual(parse_resource_quantity('2'), 2.0)
 
-        # Test memory units
+        # Test memory units (MiB)
         self.assertEqual(parse_resource_quantity('1Gi'), 1024.0)
         self.assertEqual(parse_resource_quantity('512Mi'), 512.0)
         self.assertEqual(parse_resource_quantity('1024Ki'), 1.0)
@@ -31,6 +33,17 @@ class TestUtils(unittest.TestCase):
         # Test edge cases
         self.assertEqual(parse_resource_quantity(''), 0)
         self.assertEqual(parse_resource_quantity(None), 0)
+
+    def test_parse_cpu_and_memory_helpers(self):
+        """Test explicit CPU and memory parsers"""
+        # CPU cores
+        self.assertEqual(parse_cpu_quantity('1500m'), 1.5)
+        self.assertEqual(parse_cpu_quantity('250000000n'), 0.25)
+        self.assertEqual(parse_cpu_quantity('2'), 2.0)
+        # Memory MiB
+        self.assertEqual(parse_memory_quantity('2Gi'), 2048.0)
+        self.assertEqual(parse_memory_quantity('2048Mi'), 2048.0)
+        self.assertAlmostEqual(parse_memory_quantity('1048576'), 1.0, places=2)  # bytes fallback
 
     def test_classify_spark_pods(self):
         """Test classification of Spark pods"""
@@ -100,7 +113,7 @@ class TestUtils(unittest.TestCase):
         """Test calculation of resource utilization"""
         self.assertEqual(calculate_utilization(50, 100), 50.0)
         self.assertEqual(calculate_utilization(1, 2), 50.0)
-        self.assertEqual(calculate_utilization(0, 0), 0.0)  # Test with default limit
+        self.assertEqual(calculate_utilization(0, 0), 0.0)  # Limit 0 returns 0.0 now
 
     def test_get_status_color(self):
         """Test status color mapping"""

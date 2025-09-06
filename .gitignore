@@ -137,6 +137,14 @@ dmypy.json
 *.sqlite3
 spark_pods_history.db
 
+# SQLite WAL/SHM sidecar files
+*.db-wal
+*.db-shm
+*.sqlite-wal
+*.sqlite-shm
+*.sqlite3-wal
+*.sqlite3-shm
+
 # Test databases
 test_*.db
 *_test.db
@@ -179,3 +187,4 @@ Thumbs.db
 exports/
 *.json
 *.csv
+

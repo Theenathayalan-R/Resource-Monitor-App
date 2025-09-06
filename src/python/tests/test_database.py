@@ -6,7 +6,7 @@ import tempfile
 import os
 import sqlite3
 from datetime import datetime
-from unittest.mock import Mock, patch
+from unittest.mock import Mock
 from modules.database import HistoryManager
 
 
@@ -40,17 +40,20 @@ class TestHistoryManager(unittest.TestCase):
 
         conn.close()
 
-    def test_store_pod_data(self):
-        """Test storing pod data"""
-        # Create mock pod
+    def _mock_pod(self, name='test-pod'):
         pod = Mock()
-        pod.metadata.name = 'test-pod'
+        pod.metadata.name = name
         pod.metadata.labels = {'app': 'test'}
         pod.metadata.annotations = {'created-by': 'test'}
         pod.status.phase = 'Running'
         pod.metadata.creation_timestamp = datetime.now()
         pod.spec.node_name = 'node-1'
         pod.status.container_statuses = [Mock(restart_count=0)]
+        return pod
+
+    def test_store_pod_data(self):
+        """Test storing pod data"""
+        pod = self._mock_pod('test-pod')
 
         resources = {
             'cpu_request': 1.0,
@@ -82,25 +85,38 @@ class TestHistoryManager(unittest.TestCase):
 
         conn.close()
 
+    def test_store_pod_data_batch(self):
+        """Test batch insertion of pod data"""
+        pod = self._mock_pod('batch-pod')
+
+        items = [
+            (
+                'ns', 'batch-pod', 'driver', 'app', 'Running',
+                1, 2, 0.5, 1024, 2048, 512,
+                'node-1', pod.metadata.creation_timestamp, {'k':'v'}, {'a':'b'}, 0
+            )
+        ]
+        self.history_manager.store_pod_data_batch(items)
+
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM pod_history WHERE pod_name='batch-pod'")
+        count = cursor.fetchone()[0]
+        conn.close()
+        self.assertEqual(count, 1)
+
     def test_mark_pods_inactive(self):
         """Test marking pods as inactive"""
         # First store some active pods
-        pod = Mock()
-        pod.metadata.name = 'active-pod'
-        pod.metadata.labels = {}
-        pod.metadata.annotations = {}
-        pod.status.container_statuses = []
-        pod.metadata.creation_timestamp = datetime.now()
-        pod.spec.node_name = 'node-1'
-        pod.status.phase = 'Running'
+        pod = self._mock_pod('active-pod')
 
         resources = {'cpu_request': 1, 'cpu_limit': 1, 'memory_request': 1, 'memory_limit': 1}
         metrics = {'cpu_usage': 1, 'memory_usage': 1}
 
         self.history_manager.store_pod_data('ns', pod, 'driver', 'app', resources, metrics)
 
-        # Mark pods inactive
-        self.history_manager.mark_pods_inactive('ns', ['inactive-pod'])
+        # Mark pods inactive by specifying an unrelated active list
+        self.history_manager.mark_pods_inactive('ns', ['another-pod'])
 
         # Verify pod was marked inactive
         conn = sqlite3.connect(self.db_path)
@@ -114,53 +130,29 @@ class TestHistoryManager(unittest.TestCase):
 
     def test_get_historical_data(self):
         """Test retrieving historical data"""
-        # Store test data
-        pod = Mock()
-        pod.metadata.name = 'test-pod'
-        pod.metadata.labels = {}
-        pod.metadata.annotations = {}
-        pod.status.container_statuses = []
-        pod.metadata.creation_timestamp = datetime.now()
-        pod.spec.node_name = 'node-1'
-        pod.status.phase = 'Running'
-
+        pod = self._mock_pod('hist-pod')
         resources = {'cpu_request': 1, 'cpu_limit': 1, 'memory_request': 1, 'memory_limit': 1}
         metrics = {'cpu_usage': 1, 'memory_usage': 1}
 
         self.history_manager.store_pod_data('ns', pod, 'driver', 'app', resources, metrics)
 
-        # Retrieve data
         df = self.history_manager.get_historical_data('ns', hours_back=24)
 
         self.assertFalse(df.empty)
-        self.assertEqual(len(df), 1)
-        self.assertEqual(df.iloc[0]['pod_name'], 'test-pod')
+        self.assertEqual(df.iloc[0]['pod_name'], 'hist-pod')
 
     def test_cleanup_old_data(self):
-        """Test cleanup of old data"""
-        # This test would require manipulating timestamps
-        # For now, just ensure the method runs without error
+        """Test cleanup of old data (no-op validation)"""
         self.history_manager.cleanup_old_data(30)
-        # If we get here without exception, the test passes
 
     def test_export_historical_data(self):
         """Test data export functionality"""
-        # Store test data
-        pod = Mock()
-        pod.metadata.name = 'export-pod'
-        pod.metadata.labels = {}
-        pod.metadata.annotations = {}
-        pod.status.container_statuses = []
-        pod.metadata.creation_timestamp = datetime.now()
-        pod.spec.node_name = 'node-1'
-        pod.status.phase = 'Running'
-
+        pod = self._mock_pod('export-pod')
         resources = {'cpu_request': 1, 'cpu_limit': 1, 'memory_request': 1, 'memory_limit': 1}
         metrics = {'cpu_usage': 1, 'memory_usage': 1}
-
         self.history_manager.store_pod_data('ns', pod, 'driver', 'app', resources, metrics)
 
-        # Export data
+        # Export data (inclusive end date)
         json_data = self.history_manager.export_historical_data(
             'ns', '2023-01-01', '2025-12-31', 'json'
         )
