@@ -170,7 +170,7 @@ def main():
     pod_age_hours = st.sidebar.selectbox(
         "Show pods started in last:",
         options=[1, 2, 6, 12, 24, 48, 72, 168],  # 1h, 2h, 6h, 12h, 1d, 2d, 3d, 1w
-        index=2,  # Default to 6 hours
+        index=0,  # Default to 1 hour
         format_func=lambda x: f"{x} hours" if x < 24 else f"{x//24} days",
         help="Filter pods by their creation time to improve performance and focus on recent activity"
     )
