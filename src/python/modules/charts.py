@@ -7,11 +7,13 @@ import pandas as pd
 
 
 def create_resource_chart(pod_data, title):
-    """Create resource utilization chart"""
+    """Create resource utilization chart with CPU/Memory bars and gauges (reverted)."""
     fig = make_subplots(
         rows=2, cols=2,
-        subplot_titles=('CPU Usage vs Limits', 'Memory Usage vs Limits',
-                       'CPU Utilization %', 'Memory Utilization %'),
+        subplot_titles=(
+            'CPU Usage vs Limits', 'Memory Usage vs Limits',
+            '', ''  # remove labels for utilization gauges
+        ),
         specs=[[{"secondary_y": False}, {"secondary_y": False}],
                [{"type": "indicator"}, {"type": "indicator"}]]
     )
@@ -50,7 +52,7 @@ def create_resource_chart(pod_data, title):
         row=1, col=2
     )
 
-    # CPU utilization gauge
+    # CPU utilization gauge (no title)
     limit_cpu = max(pod_data['cpu_limit'], 0.0)
     cpu_util = (pod_data['cpu_usage'] / (limit_cpu if limit_cpu > 0 else 0.1)) * 100
     fig.add_trace(
@@ -58,7 +60,6 @@ def create_resource_chart(pod_data, title):
             mode="gauge+number+delta",
             value=cpu_util,
             domain={'x': [0, 1], 'y': [0, 1]},
-            title={'text': "CPU %"},
             gauge={
                 'axis': {'range': [None, 100]},
                 'bar': {'color': "red" if cpu_util > 80 else "orange" if cpu_util > 60 else "green"},
@@ -77,7 +78,7 @@ def create_resource_chart(pod_data, title):
         row=2, col=1
     )
 
-    # Memory utilization gauge
+    # Memory utilization gauge (no title)
     limit_mem = max(pod_data['memory_limit'], 0.0)
     mem_util = (pod_data['memory_usage'] / (limit_mem if limit_mem > 0 else 1)) * 100
     fig.add_trace(
@@ -85,7 +86,6 @@ def create_resource_chart(pod_data, title):
             mode="gauge+number+delta",
             value=mem_util,
             domain={'x': [0, 1], 'y': [0, 1]},
-            title={'text': "Memory %"},
             gauge={
                 'axis': {'range': [None, 100]},
                 'bar': {'color': "red" if mem_util > 80 else "orange" if mem_util > 60 else "green"},
@@ -104,11 +104,23 @@ def create_resource_chart(pod_data, title):
         row=2, col=2
     )
 
+    # Layout (legend at bottom)
     fig.update_layout(
         title=title,
-        height=600,
-        showlegend=True
+        height=620,
+        showlegend=True,
+        legend=dict(orientation='h', yanchor='top', y=-0.15, x=0.5, xanchor='center'),
+        margin=dict(l=60, r=30, t=70, b=90),
+        barmode='group',
+        bargap=0.2,
+        uniformtext_minsize=10,
+        uniformtext_mode='hide',
+        template='plotly_white',
     )
+
+    fig.update_xaxes(automargin=True, tickangle=0, row=1, col=1)
+    fig.update_xaxes(automargin=True, tickangle=0, row=1, col=2)
+    fig.update_yaxes(automargin=True)
 
     return fig
 
@@ -156,11 +168,16 @@ def create_historical_timeline_chart(historical_df, pod_name):
         title=f'Resource Usage Timeline - {pod_name}',
         height=600,
         showlegend=True,
-        xaxis_title="Time"
+        xaxis_title="Time",
+        legend=dict(orientation='h', yanchor='top', y=-0.2, x=0.5, xanchor='center'),
+        margin=dict(l=60, r=30, t=70, b=90),
+        hovermode='x unified',
+        template='plotly_white',
     )
 
-    fig.update_yaxes(title_text="CPU Cores", row=1, col=1)
-    fig.update_yaxes(title_text="Memory (MiB)", row=2, col=1)
+    fig.update_yaxes(title_text="CPU Cores", row=1, col=1, automargin=True)
+    fig.update_yaxes(title_text="Memory (MiB)", row=2, col=1, automargin=True)
+    fig.update_xaxes(automargin=True)
 
     return fig
 
@@ -202,8 +219,20 @@ def create_application_summary_chart(historical_df):
 
     fig.update_layout(
         title="Application Resource Summary",
-        height=400,
-        showlegend=True
+        height=420,
+        showlegend=True,
+        legend=dict(orientation='h', yanchor='top', y=-0.25, x=0.5, xanchor='center'),
+        margin=dict(l=60, r=30, t=70, b=90),
+        barmode='group',
+        bargap=0.2,
+        uniformtext_minsize=10,
+        uniformtext_mode='hide',
+        template='plotly_white',
     )
+
+    # Rotate x labels to prevent overlap
+    fig.update_xaxes(automargin=True, tickangle=-30, row=1, col=1)
+    fig.update_xaxes(automargin=True, tickangle=-30, row=1, col=2)
+    fig.update_yaxes(automargin=True)
 
     return fig
