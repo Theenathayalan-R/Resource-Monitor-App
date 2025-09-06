@@ -17,7 +17,7 @@ from mock_data import generate_mock_pods, generate_mock_metrics
 from kubernetes_client import KubernetesClient
 
 
-def render_current_status(namespace: str, api_server_url: str, token: str | None, history_manager, demo_mode: bool, refresh_interval: int, auto_refresh: bool):
+def render_current_status(namespace: str, api_server_url: str, token: str | None, history_manager, demo_mode: bool, refresh_interval: int, auto_refresh: bool, pod_age_hours: int = 6):
     if not token and not demo_mode:
         st.warning("Please provide a valid token to use Current Status mode, or enable 'Use mock data (demo)'.")
         return
@@ -32,6 +32,13 @@ def render_current_status(namespace: str, api_server_url: str, token: str | None
         pods, drivers, executors = generate_mock_pods(namespace, drivers=2, executors_per_driver=3)
         metrics_map = generate_mock_metrics(pods)
     else:
+        # Show filter status
+        if pod_age_hours < 24:
+            st.info(f"🔍 Filtering to show only pods started in the last {pod_age_hours} hours")
+        else:
+            days = pod_age_hours // 24
+            st.info(f"🔍 Filtering to show only pods started in the last {days} day{'s' if days > 1 else ''}")
+        
         # Initialize Kubernetes client
         if (token is not None) and ('k8s_client' not in st.session_state or st.sidebar.button("Reconnect")):
             with st.spinner("Connecting to cluster..."):
@@ -49,9 +56,9 @@ def render_current_status(namespace: str, api_server_url: str, token: str | None
 
         # Fetch and store current pods data
         start_time = time.time()
-        with st.spinner("Fetching pods and storing history..."):
+        with st.spinner(f"Fetching pods started in last {pod_age_hours} hours and storing history..."):
             try:
-                pods = k8s_client.get_pods(namespace)
+                pods = k8s_client.get_pods(namespace, max_age_hours=pod_age_hours)
                 drivers, executors = classify_spark_pods(pods)
 
                 # Batch metrics retrieval for namespace

@@ -122,8 +122,8 @@ class KubernetesClient:
         retry=retry_if_exception_type((ApiException, ConnectionError))
     )
     @monitor_performance("kubernetes")
-    def get_pods(self, namespace: str) -> List[Any]:
-        """Get all pods in the specified namespace with retry logic"""
+    def get_pods(self, namespace: str, max_age_hours: Optional[int] = None) -> List[Any]:
+        """Get all pods in the specified namespace with optional age filter and retry logic"""
         try:
             namespace = validate_namespace(namespace)
             
@@ -134,6 +134,9 @@ class KubernetesClient:
             get_performance_monitor().record_api_call()
             
             logger.debug(f"Fetching pods from namespace: {namespace}")
+            if max_age_hours:
+                logger.debug(f"Filtering pods to those started within last {max_age_hours} hours")
+            
             pods_response = self.v1.list_namespaced_pod(
                 namespace=namespace,
                 timeout_seconds=30,
@@ -141,6 +144,27 @@ class KubernetesClient:
             )
             
             pods = pods_response.items
+            
+            # Filter by age if specified
+            if max_age_hours is not None:
+                from datetime import datetime, timezone, timedelta
+                cutoff_time = datetime.now(timezone.utc) - timedelta(hours=max_age_hours)
+                
+                filtered_pods = []
+                for pod in pods:
+                    if pod.metadata.creation_timestamp:
+                        # Convert creation_timestamp to UTC if it isn't already
+                        creation_time = pod.metadata.creation_timestamp
+                        if creation_time.tzinfo is None:
+                            creation_time = creation_time.replace(tzinfo=timezone.utc)
+                        
+                        if creation_time >= cutoff_time:
+                            filtered_pods.append(pod)
+                
+                original_count = len(pods)
+                pods = filtered_pods
+                logger.info(f"Filtered {original_count} pods to {len(pods)} pods created within last {max_age_hours} hours")
+            
             logger.info(f"Successfully retrieved {len(pods)} pods from namespace {namespace}")
             return pods
             

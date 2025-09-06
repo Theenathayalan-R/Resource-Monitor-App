@@ -165,6 +165,16 @@ def main():
     
     view_mode = st.sidebar.selectbox("Select View", VIEW_MODES, key="view_mode")
     
+    # Pod filter settings for Current Status view - moved above history settings
+    st.sidebar.subheader("🔍 Pod Filters (Current Status)")
+    pod_age_hours = st.sidebar.selectbox(
+        "Show pods started in last:",
+        options=[1, 2, 6, 12, 24, 48, 72, 168],  # 1h, 2h, 6h, 12h, 1d, 2d, 3d, 1w
+        index=2,  # Default to 6 hours
+        format_func=lambda x: f"{x} hours" if x < 24 else f"{x//24} days",
+        help="Filter pods by their creation time to improve performance and focus on recent activity"
+    )
+    
     st.sidebar.header("📚 History Settings")
     retention_days = st.sidebar.slider("Data retention (days)", 1, 30, HISTORY_RETENTION_DAYS)
 
@@ -287,7 +297,8 @@ def main():
                 history_manager, 
                 demo_mode, 
                 refresh_interval, 
-                auto_refresh
+                auto_refresh,
+                pod_age_hours
             )
         elif view_mode == "Historical Analysis":
             # Seed demo data automatically if empty and in demo mode
