@@ -40,7 +40,7 @@ class KubernetesClient:
                     'name': 'openshift-cluster',
                     'cluster': {
                         'server': self.api_server_url,
-                        # Prefer TLS verification; allow disabling via config
+                        # TLS verification is disabled by default. Set TLS_VERIFY=true in config to enable.
                         'insecure-skip-tls-verify': not TLS_VERIFY
                     }
                 }],

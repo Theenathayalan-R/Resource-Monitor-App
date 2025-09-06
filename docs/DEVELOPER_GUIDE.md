@@ -29,8 +29,8 @@ This guide explains the architecture, development workflow, testing, and release
 
 - Environment variables: see README (DB_PATH, TLS_VERIFY, etc.)
 - Token handling:
-  - Preferred: set streamlit secrets in `.streamlit/secrets.toml` with `KUBE_TOKEN`.
-  - Sidebar supports file upload or masked paste.
+  - Primary method: manual token input via the sidebar (masked input field)
+  - Token is validated before use and stored in session state only
 
 ## Demo Mode (Mock Data)
 

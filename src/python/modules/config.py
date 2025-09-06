@@ -37,7 +37,7 @@ LAYOUT = "wide"
 
 # Security settings
 # Prefer secure TLS by default; allow opting out via env var (not recommended)
-TLS_VERIFY = os.getenv('TLS_VERIFY', 'true').lower() in ('1', 'true', 'yes')
+TLS_VERIFY = os.getenv('TLS_VERIFY', 'false').lower() in ('1', 'true', 'yes')
 
 # Performance settings
 MAX_DB_CONNECTIONS = int(os.getenv('MAX_DB_CONNECTIONS', '5'))

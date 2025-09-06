@@ -519,27 +519,20 @@ TLS_VERIFY=false  # OK for development with self-signed certs
 DEFAULT_REFRESH_INTERVAL=15
 ```
 
-### Streamlit Secrets Configuration (Recommended)
+### Token Input Configuration
 
-Create `.streamlit/secrets.toml` for secure token storage:
+The application uses manual token input for Kubernetes cluster authentication. Simply paste your service account token directly in the application interface.
 
-```toml
-# Streamlit Secrets Configuration
-# This file should never be committed to version control
+```bash
+# Create dedicated service account
+oc create namespace spark-monitoring
+oc create serviceaccount spark-monitor -n spark-monitoring
 
-[secrets]
-# Kubernetes Authentication Token (preferred method)
-KUBE_TOKEN = "eyJhbGciOiJSUzI1NiIsImtpZCI6..."
+# Apply RBAC permissions (use the YAML from Prerequisites section)
+oc apply -f rbac-permissions.yaml
 
-# Alternative: Multiple environment tokens
-[secrets.environments]
-production = "eyJhbGciOiJSUzI1NiIsImtpZCI6..."
-staging = "eyJhbGciOiJSUzI1NiIsImtpZCI6..."
-development = "eyJhbGciOiJSUzI1NiIsImtpZCI6..."
-
-[secrets.clusters]
-prod_cluster_url = "https://prod-k8s.company.com:6443"
-staging_cluster_url = "https://staging-k8s.company.com:6443"
+# Get the service account token to paste in the application
+oc create token spark-monitor -n spark-monitoring --duration=8760h  # 1 year
 ```
 
 ### Advanced Configuration Options
@@ -617,20 +610,14 @@ oc config view --minify --flatten > cluster-config.yaml
 
 ### Token Security Best Practices
 
-1. **🔐 Use Streamlit Secrets** (Recommended):
-   ```toml
-   # .streamlit/secrets.toml
-   KUBE_TOKEN = "your-token-here"
-   ```
-
-2. **📁 Upload Token File**:
-   - Use the "Upload token file" option in sidebar
-   - File is processed in memory only, never stored
-
-3. **⌨️ Manual Token Input**:
-   - Use for testing only
+1. **⌨️ Manual Token Input** (Primary Method):
+   - Paste your service account token directly in the application
    - Input is masked for security
-   - Consider using Streamlit secrets instead
+   - Token is validated before use
+
+2. **📁 Demo Mode**:
+   - Use "Use mock data (demo)" for testing without a cluster
+   - Generates realistic sample data for demonstration
 
 ## 🎯 Usage
 
@@ -837,10 +824,9 @@ LOG_LEVEL=DEBUG python -m pytest tests/test_integration.py -v -s
 ### 🛡️ **Enterprise Security Features**
 
 #### **Authentication & Authorization**
-- **🔐 Secure Token Handling**: Multiple secure authentication methods
-  - Streamlit secrets (recommended for production)
-  - File upload with in-memory processing only
-  - Masked manual token input
+- **🔐 Secure Token Handling**: Manual token input with validation
+  - Masked token input field for security
+  - Token validation before use
   - Service account token integration
 - **✅ RBAC Validation**: Proper Kubernetes role-based access control
 - **🔒 TLS Verification**: Configurable certificate validation (enabled by default)
@@ -884,7 +870,7 @@ ENABLE_AUDIT_LOGGING=false         # Reduce log volume
 2. **🛡️ Network Policies**: Implement Kubernetes network policies to restrict access
 3. **📊 Monitoring**: Enable security monitoring and alerting
 4. **🔄 Token Rotation**: Regular rotation of authentication tokens
-5. **🔒 Secrets Management**: Use Kubernetes secrets or external secret managers
+5. **🔒 Token Management**: Secure handling of service account tokens
 
 #### **Operational Security**
 1. **📝 Audit Logging**: Enable comprehensive audit logging for compliance
@@ -1089,7 +1075,7 @@ Before deploying to production, ensure the following:
 
 #### **✅ Security Checklist**
 - [ ] **Service Account Created**: Dedicated service account with minimal RBAC permissions
-- [ ] **Secrets Configured**: Tokens stored in Kubernetes secrets or external secret manager  
+- [ ] **Token Management**: Secure handling and rotation of service account tokens
 - [ ] **TLS Verification Enabled**: `TLS_VERIFY=true` for certificate validation
 - [ ] **Audit Logging Enabled**: Complete audit trail for compliance requirements
 - [ ] **Network Policies Applied**: Restrict network access to authorized sources only
