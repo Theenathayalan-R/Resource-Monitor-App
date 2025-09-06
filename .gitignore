@@ -149,23 +149,46 @@ spark_pods_history.db
 test_*.db
 *_test.db
 
+# Performance monitoring files
+performance_*.log
+monitoring_*.json
+
 # Kubernetes config files (sensitive)
 kubeconfig
 .kube/
 config
+*.kubeconfig
+
+# Application configuration (may contain secrets)
+app_config.yaml
+app_config.json
+.env.local
+.env.production
 
 # Streamlit
 .streamlit/
+.streamlit/secrets.toml
 
-# Logs
+# Logs and monitoring
 *.log
 logs/
+src/python/logs/
+monitoring/
+performance_logs/
 
 # Temporary files
 *.tmp
 *.temp
 temp/
 tmp/
+
+# Validation cache
+validation_cache/
+.validation/
+
+# Performance data
+performance_data/
+metrics/
 
 # OS generated files
 .DS_Store
@@ -185,6 +208,23 @@ Thumbs.db
 
 # Data exports
 exports/
-*.json
-*.csv
+export_*.json
+export_*.csv
+
+# Backup files
+backup/
+*.bak
+*.backup
+
+# Security sensitive files
+tokens/
+certificates/
+*.pem
+*.key
+*.crt
+
+# Testing artifacts
+.pytest_cache/
+test_results/
+coverage_reports/
 
