@@ -2,7 +2,7 @@
 
 A **production-ready**, enterprise-grade Streamlit application for monitoring Apache Spark applications on **Red Hat OpenShift** and Kubernetes clusters. Features comprehensive error handling, performance optimization, input validation, and extensive testing coverage.
 
-[![Test Status](https://img.shields.io/badge/tests-29%2F29%20passing-brightgreen)](test_runner.py)
+[![Test Status](https://img.shields.io/badge/tests-30%2F30%20passing-brightgreen)](test_runner.py)
 [![Production Ready](https://img.shields.io/badge/production-ready-brightgreen)](#production-deployment)
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue)](#prerequisites)
 
@@ -27,7 +27,7 @@ A **production-ready**, enterprise-grade Streamlit application for monitoring Ap
 - **🔧 User-Friendly Messages**: Clear, actionable error messages with troubleshooting guidance
 
 ### 🧪 **Extensive Testing Framework** 
-- **✅ 29/29 Tests Passing**: Complete test coverage across all modules
+- **✅ 30/30 Tests Passing**: Complete test coverage across all modules
 - **🔄 Integration Testing**: End-to-end workflow validation
 - **⚡ Performance Benchmarks**: Automated performance regression detection
 - **🚨 Error Scenario Testing**: Comprehensive failure mode validation
@@ -56,14 +56,16 @@ A **production-ready**, enterprise-grade Streamlit application for monitoring Ap
 - 🔄 **Auto-refresh** - Configurable refresh intervals (10-300 seconds) with background processing
 - 🎯 **Application Grouping** - Intelligent association of executors with their driver pods
 - ⚡ **Batch API Calls** - Optimized Kubernetes Metrics API queries for better performance
+- ⏰ **Smart Pod Filtering** - Configurable time-based filtering (1h-7d) to show pods by creation age, with default 1-hour window for optimal performance
 
 ### Historical Analysis & Data Persistence
 - 💾 **Enhanced SQLite Storage** - WAL mode with connection pooling for optimal performance
-- 📈 **Advanced Timeline Analysis** - Complete pod lifecycle tracking with detailed metrics
+- 📈 **Time-Series Data Collection** - Automatic data capture every 30 seconds (configurable) with timestamped records
 - 🕒 **Ephemeral Pod Tracking** - Captures data from terminated executor pods before they disappear
 - 📤 **Flexible Data Export** - JSON/CSV export with date filtering and compression options
 - 🔧 **Smart Data Retention** - Configurable cleanup policies (1-365 days) with automatic optimization
 - 🗄️ **Database Health Monitoring** - Real-time database statistics and performance metrics
+- 📊 **Trend Analytics** - Historical resource usage patterns with complete pod lifecycle tracking
 
 ### Advanced Visualizations & Analytics
 - 📊 **Interactive Gauges** - CPU/Memory utilization with warning thresholds and color coding
@@ -648,10 +650,10 @@ graph TD
 
 ## 📊 View Modes
 
-- Current Status: Real-time pods, batched Metrics API calls, driver/executor grouping
-- Historical Analysis: Aggregations and trends (memory in MiB)
-- Pod Timeline: Per-pod history and events
-- Export Data: JSON/CSV export with inclusive end date
+- **Current Status**: Real-time pods with smart time-based filtering (1h-7d, default 1h), batched Metrics API calls, driver/executor grouping
+- **Historical Analysis**: Time-series analytics with 30-second data collection, aggregations and trends (memory in MiB)
+- **Pod Timeline**: Per-pod history and lifecycle events with detailed resource tracking
+- **Export Data**: JSON/CSV export with date range filtering and inclusive end date handling
 - Demo Mode: Enable “Use mock data (demo)” in the sidebar to populate the UI with realistic sample Spark driver/executor pods and metrics. Use “Seed demo data now” to write a snapshot into the local SQLite DB so Historical Analysis and Timeline views also have data.
 
 ## 🧪 Testing & Quality Assurance
