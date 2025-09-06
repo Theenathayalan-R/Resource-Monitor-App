@@ -19,9 +19,9 @@ sys.path.insert(0, str(modules_dir))
 # Import logging setup
 try:
     from modules.logging_config import setup_logging
-except ImportError:
+except Exception:
     # Fallback logging setup
-    def setup_logging(level, log_file):
+    def setup_logging(level='INFO', log_file=None):
         logging.basicConfig(level=getattr(logging, level))
 
 
@@ -183,7 +183,7 @@ def generate_test_report(success, return_code, total_time):
     print()
     
     # Recommendations
-    print("� Recommendations:")
+    print("Recommendations:")
     if success:
         print("  • All tests passed! ✅")
         print("  • Ready for production deployment 🚀")
@@ -195,7 +195,7 @@ def generate_test_report(success, return_code, total_time):
         print("  • Check logs for detailed error information")
         print("  • Ensure all dependencies are installed correctly")
     
-    print("\n� Next Steps:")
+    print("\nNext Steps:")
     if success:
         print("  1. Deploy to staging environment")
         print("  2. Run integration tests in staging")

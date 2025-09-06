@@ -33,16 +33,19 @@ def render_current_status(namespace: str, api_server_url: str, token: str | None
         metrics_map = generate_mock_metrics(pods)
     else:
         # Initialize Kubernetes client
-        if 'k8s_client' not in st.session_state or st.sidebar.button("Reconnect"):
+        if (token is not None) and ('k8s_client' not in st.session_state or st.sidebar.button("Reconnect")):
             with st.spinner("Connecting to cluster..."):
                 try:
-                    st.session_state.k8s_client = KubernetesClient(api_server_url, token)
+                    st.session_state.k8s_client = KubernetesClient(api_server_url, str(token))
                     st.success("Successfully connected to the cluster!")
                 except Exception as e:
                     st.error(f"Failed to connect to the cluster: {str(e)}")
                     return
 
-        k8s_client = st.session_state.k8s_client
+        k8s_client = st.session_state.get('k8s_client')
+        if k8s_client is None:
+            st.error("Cluster client not initialized. Please provide a valid token or enable demo mode.")
+            return
 
         # Fetch and store current pods data
         start_time = time.time()

@@ -339,7 +339,7 @@ class HistoryManager:
 
                 base_query += ' ORDER BY timestamp DESC LIMIT 10000'  # Limit for performance
 
-                df = pd.read_sql_query(base_query, conn, params=params)
+                df = pd.read_sql_query(base_query, conn, params=tuple(params))
                 logger.debug(f"Retrieved {len(df)} historical records for {namespace}")
                 return df
                 
@@ -525,6 +525,26 @@ class HistoryManager:
                 'health_status': 'error',
                 'error': str(e)
             }
+
+    def list_pod_names(self, namespace: Optional[str] = None) -> List[str]:
+        """Return distinct pod names, optionally filtered by namespace."""
+        try:
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                if namespace:
+                    cursor.execute(
+                        "SELECT DISTINCT pod_name FROM pod_history WHERE namespace = ? ORDER BY pod_name",
+                        (namespace.strip(),)
+                    )
+                else:
+                    cursor.execute(
+                        "SELECT DISTINCT pod_name FROM pod_history ORDER BY pod_name"
+                    )
+                rows = cursor.fetchall()
+                return [r[0] for r in rows]
+        except Exception as e:
+            logger.error(f"Failed to list pod names: {str(e)}", exc_info=True)
+            return []
 
     def close(self):
         """Close database connections and cleanup"""

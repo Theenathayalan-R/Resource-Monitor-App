@@ -11,6 +11,7 @@ from typing import Dict, Any, Optional
 from dataclasses import dataclass
 from collections import deque
 from functools import wraps
+from config import PERFORMANCE_THRESHOLDS
 
 logger = logging.getLogger(__name__)
 
@@ -131,15 +132,15 @@ class PerformanceMonitor:
         issues = {}
         
         # Check CPU usage
-        if current.cpu_percent > 80:
+        if current.cpu_percent > PERFORMANCE_THRESHOLDS.get('cpu_warning', 80):
             issues['high_cpu'] = current.cpu_percent
         
         # Check memory usage
-        if current.memory_percent > 85:
+        if current.memory_percent > PERFORMANCE_THRESHOLDS.get('memory_warning', 85):
             issues['high_memory'] = current.memory_percent
         
         # Check response time (if available)
-        if current.response_time_ms > 5000:  # 5 seconds
+        if current.response_time_ms > PERFORMANCE_THRESHOLDS.get('response_time_warning', 5000):
             issues['slow_response'] = current.response_time_ms
         
         return {

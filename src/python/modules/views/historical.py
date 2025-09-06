@@ -1,7 +1,6 @@
 """
 Historical Analysis view: aggregations, trends, and app summary
 """
-import sqlite3
 import pandas as pd
 import streamlit as st
 from datetime import datetime, timedelta
@@ -58,10 +57,9 @@ def render_historical(namespace: str, history_manager, demo_mode: bool):
 def render_timeline(namespace: str, history_manager):
     st.header("⏱️ Pod Timeline")
 
-    # Get all pod names from history
-    conn = sqlite3.connect(history_manager.db_path)
-    pod_names = pd.read_sql_query("SELECT DISTINCT pod_name FROM pod_history ORDER BY pod_name", conn)
-    conn.close()
+    # Get all pod names from history via HistoryManager for pooled access
+    pod_names_list = history_manager.list_pod_names(namespace)
+    pod_names = pd.DataFrame({'pod_name': pod_names_list}) if pod_names_list else pd.DataFrame(columns=['pod_name'])
 
     if not pod_names.empty:
         selected_pod = st.selectbox("Select Pod for Timeline", pod_names['pod_name'].tolist())

@@ -21,7 +21,10 @@ from modules.mock_data import generate_mock_pods, generate_mock_metrics
 from modules.utils import classify_spark_pods, get_pod_resources, extract_app_name
 from modules.validation import validate_namespace, validate_api_server_url
 from modules.performance import PerformanceMonitor, get_performance_monitor
-from logging_config import setup_logging, DatabaseError, KubernetesError
+try:
+    from logging_config import setup_logging, DatabaseError, KubernetesError
+except Exception:
+    from modules.logging_config import setup_logging, DatabaseError, KubernetesError
 
 
 class TestIntegration(unittest.TestCase):
@@ -282,7 +285,9 @@ class TestIntegration(unittest.TestCase):
 
         # Verify data was stored
         stats = self.history_manager.get_database_stats()
-        self.assertEqual(stats['total_records'], 2)  # 1 driver + 1 executor    def test_memory_and_performance_limits(self):
+        self.assertEqual(stats['total_records'], 2)  # 1 driver + 1 executor
+
+    def test_memory_and_performance_limits(self):
         """Test application behavior with large datasets"""
         # Generate large dataset
         large_namespace = "large-test-namespace"

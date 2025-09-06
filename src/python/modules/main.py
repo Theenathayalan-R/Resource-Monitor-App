@@ -2,10 +2,7 @@
 Main Streamlit application for Spark Pod Resource Monitor
 """
 import streamlit as st
-import pandas as pd
 import yaml
-import sqlite3
-import time
 import logging
 from datetime import datetime, timedelta, date
 
@@ -140,27 +137,72 @@ def main():
 
     history_manager = st.session_state.history_manager
 
-    # Sidebar configuration with validation
-    st.sidebar.header("⚙️ Configuration")
+    # --- Sidebar ---
+    
+    # Define a function to determine the correct view mode
+    def get_current_view_mode(token_available, demo_mode_active):
+        # Initialize view_mode in session state if it doesn't exist
+        if 'view_mode' not in st.session_state:
+            st.session_state['view_mode'] = VIEW_MODES[0]
 
-    # API Server URL with validation
+        current_mode = st.session_state['view_mode']
+        
+        # Logic to determine if a switch is needed
+        if demo_mode_active and current_mode != "Current Status":
+            return "Current Status"
+        elif not demo_mode_active and not token_available and current_mode == "Current Status":
+            return "Historical Analysis"
+        
+        return current_mode
+
+    # --- Create all sidebar widgets to get their current values ---
+    
+    # View Mode section at the top
+    st.sidebar.header("👁️ View Mode")
+    # Initialize view_mode in session state if it doesn't exist
+    if 'view_mode' not in st.session_state:
+        st.session_state['view_mode'] = VIEW_MODES[0]
+    
+    view_mode = st.sidebar.selectbox("Select View", VIEW_MODES, key="view_mode")
+    
+    st.sidebar.header("📚 History Settings")
+    retention_days = st.sidebar.slider("Data retention (days)", 1, 30, HISTORY_RETENTION_DAYS)
+
+    auto_refresh = st.sidebar.checkbox("Auto-refresh", value=True)
+    refresh_interval = st.sidebar.slider("Refresh interval (seconds)", 10, 300, DEFAULT_REFRESH_INTERVAL)
+
+    demo_mode = st.sidebar.checkbox(
+        "Use mock data (demo)", 
+        value=False, 
+        help="Populate UI with realistic sample Spark driver/executor pods and metrics without requiring a cluster token."
+    )
+
+    # Configuration section
+    st.sidebar.header("⚙️ Configuration")
     api_server_url = st.sidebar.text_input(
         "OpenShift API Server URL",
         value=DEFAULT_API_SERVER,
-        help="Enter the OpenShift/Kubernetes API server URL"
+        help="Enter the OpenShift/Kubernetes API server URL",
+        key="api_server_input"
     )
-
-    # Namespace with validation
     namespace = st.sidebar.text_input(
         "Project/Namespace",
         value=DEFAULT_NAMESPACE,
-        help="Enter the namespace where Spark applications are running"
+        help="Enter the namespace where Spark applications are running",
+        key="namespace_input"
+    )
+    manual_token = st.sidebar.text_input(
+        "Paste token manually:",
+        type="password",
+        help="Paste your service account token here",
+        key="token_input"
     )
 
-    # Validate inputs immediately
+    # --- Logic and Validation ---
+
+    # Validate config inputs
     config_errors = []
     validated_config = {}
-    
     try:
         if api_server_url.strip():
             validated_config['api_server_url'] = validate_api_server_url(api_server_url)
@@ -177,93 +219,25 @@ def main():
         for error in config_errors:
             st.sidebar.error(f"❌ {error}")
 
-    # File uploader for kubeconfig token
-    uploaded_token = st.sidebar.file_uploader(
-        "Upload Kubeconfig Token File",
-        type=['txt', 'yaml', 'yml'],
-        help="Upload your kubeconfig file or token file"
-    )
-
-    # Option to use Streamlit secrets
-    secret_token = None
-    try:
-        secret_token = st.secrets.get("KUBE_TOKEN", None)
-        if secret_token:
-            logger.info("Token loaded from Streamlit secrets")
-    except Exception as e:
-        logger.debug(f"No token found in secrets: {str(e)}")
-        secret_token = None
-        
-    use_secret = st.sidebar.checkbox("Use token from secrets", value=bool(secret_token))
-
-    # Manual token input as alternative (masked)
-    manual_token = st.sidebar.text_input(
-        "Or paste token manually:",
-        type="password",
-        help="Paste your service account token here"
-    )
-
-    # History settings with validation
-    st.sidebar.header("📚 History Settings")
-    retention_days = st.sidebar.slider("Data retention (days)", 1, 30, HISTORY_RETENTION_DAYS)
-
-    # Auto-refresh settings with validation
-    auto_refresh = st.sidebar.checkbox("Auto-refresh", value=True)
-    refresh_interval = st.sidebar.slider("Refresh interval (seconds)", 10, 300, DEFAULT_REFRESH_INTERVAL)
-
-    # Performance monitoring display
-    show_performance_sidebar()
-
     # Extract and validate token
     token = None
-    token_source = None
-
     try:
-        if use_secret and secret_token:
-            token = validate_token(secret_token)
-            token_source = "secrets"
-
-        if not token and uploaded_token is not None:
-            try:
-                content = uploaded_token.read().decode('utf-8')
-                if uploaded_token.name.endswith('.txt'):
-                    token = validate_token(content.strip())
-                    token_source = "uploaded_file"
-                else:
-                    kubeconfig = yaml.safe_load(content)
-                    if 'users' in kubeconfig:
-                        for user in kubeconfig['users']:
-                            if 'user' in user and 'token' in user['user']:
-                                token = validate_token(user['user']['token'])
-                                token_source = "kubeconfig"
-                                break
-                if not token:
-                    st.sidebar.error("❌ No valid token found in uploaded file")
-            except Exception as e:
-                logger.error(f"Error reading token file: {str(e)}", exc_info=True)
-                st.sidebar.error(f"❌ Error reading token file: {str(e)}")
-
-        if not token and manual_token.strip():
-            try:
-                token = validate_token(manual_token.strip())
-                token_source = "manual_input"
-            except Exception as e:
-                st.sidebar.error(f"❌ Invalid manual token: {str(e)}")
-
-        if token and token_source:
-            st.sidebar.success(f"✅ Token loaded from {token_source}")
-            logger.info(f"Token validated from source: {token_source}")
-
+        if manual_token.strip():
+            token = validate_token(manual_token.strip())
+            st.sidebar.success("✅ Token loaded from manual input")
+            logger.info("Token validated from source: manual_input")
     except Exception as e:
-        logger.error(f"Token validation error: {str(e)}", exc_info=True)
-        st.sidebar.error(f"❌ Token validation failed: {str(e)}")
+        st.sidebar.error(f"❌ Invalid manual token: {str(e)}")
 
-    # Demo mode toggle
-    demo_mode = st.sidebar.checkbox(
-        "Use mock data (demo)", 
-        value=False, 
-        help="Populate UI with realistic sample Spark driver/executor pods and metrics without requiring a cluster token."
-    )
+    # Show helpful hints for view mode selection based on configuration
+    if not token and not demo_mode and view_mode == "Current Status":
+        st.sidebar.warning("⚠️ Current Status requires a token or demo mode. Switch to Historical Analysis or provide a token.")
+    
+    if demo_mode and view_mode == "Historical Analysis":
+        st.sidebar.info("💡 Demo mode works best with Current Status view.")
+
+    # Performance monitoring display at the bottom
+    show_performance_sidebar()
 
     # Optional: seed demo data on demand
     if demo_mode and st.sidebar.button("Seed demo data now"):
@@ -303,20 +277,6 @@ def main():
             logger.error(f"Demo data seeding failed: {str(e)}", exc_info=True)
             st.sidebar.error(f"❌ Demo data seeding failed: {str(e)}")
 
-    # Ensure view_mode exists in session state and adjust prior to widget creation
-    if 'view_mode' not in st.session_state:
-        st.session_state['view_mode'] = VIEW_MODES[0]
-    
-    # Auto-adjust view mode based on available data
-    if demo_mode and st.session_state['view_mode'] != "Current Status":
-        st.session_state['view_mode'] = "Current Status"
-    elif not demo_mode and not token and st.session_state['view_mode'] == "Current Status":
-        st.session_state['view_mode'] = "Historical Analysis"
-
-    # View mode selection
-    st.sidebar.header("👁️ View Mode")
-    st.sidebar.selectbox("Select View", VIEW_MODES, key="view_mode")
-    view_mode = st.session_state['view_mode']
     # Route to views with comprehensive error handling
     try:
         if view_mode == "Current Status":
@@ -436,7 +396,7 @@ def main():
                     show_error_message("Export Failed", e, show_details=True)
 
             # Database maintenance with enhanced error handling
-            st.subheader("� Database Maintenance")
+            st.subheader("🛠️ Database Maintenance")
             
             col1, col2 = st.columns(2)
             with col1:

@@ -79,7 +79,7 @@ A **production-ready**, enterprise-grade Streamlit application for monitoring Ap
 - 🔧 **Production Monitoring** - Real-time performance metrics and health checks
 - 📚 **Complete Documentation** - Inline code documentation and comprehensive API docs
 - 🔄 **Continuous Integration** - Automated testing and code quality checks
-- � **Audit Trail** - Complete logging of all operations for compliance and debugging
+- 🧾 **Audit Trail** - Complete logging of all operations for compliance and debugging
 
 ## 🏗 Architecture & Design
 
@@ -318,7 +318,7 @@ chmod +x install.sh
 After successful installation:
 ```bash
 # Start the application
-./run.sh
+PORT=8502 ./run.sh
 # Application available at: http://localhost:8502
 ```
 
@@ -342,8 +342,8 @@ pip install -r requirements.txt
 python test_runner.py
 
 # Start the application
-./run.sh
-# OR manually: streamlit run src/python/spark_monitor.py --server.port 8502
+PORT=8502 ./run.sh
+# OR manually: streamlit run src/python/spark_monitor.py --server.port 8502 --server.address 0.0.0.0
 ```
 
 **🎉 Success!** Application will be available at: http://localhost:8502
@@ -388,7 +388,7 @@ pip install watchdog memory-profiler pytest-cov
 python -m pytest tests/ --cov=modules --cov-report=html
 
 # Start with debug logging
-LOG_LEVEL=DEBUG streamlit run src/python/spark_monitor.py --server.port 8502
+LOG_LEVEL=DEBUG streamlit run src/python/spark_monitor.py --server.port 8502 --server.address 0.0.0.0
 ```
 
 ### Verification Steps
@@ -541,7 +541,7 @@ oc create token spark-monitor -n spark-monitoring --duration=8760h  # 1 year
 ```bash
 # For high-volume environments
 MAX_DB_CONNECTIONS=20
-DB_TIMEOUT_SECONDS=120
+DB_TIMEOUT_SECONDS=120            # Extend timeout for large operations
 SQLITE_JOURNAL_MODE=WAL
 SQLITE_SYNCHRONOUS=NORMAL
 SQLITE_CACHE_SIZE=10000
@@ -614,7 +614,7 @@ oc config view --minify --flatten > cluster-config.yaml
    - Paste your service account token directly in the application
    - Input is masked for security
    - Token is validated before use
-
+   - Service account token integration
 2. **📁 Demo Mode**:
    - Use "Use mock data (demo)" for testing without a cluster
    - Generates realistic sample data for demonstration
@@ -627,7 +627,7 @@ oc config view --minify --flatten > cluster-config.yaml
 ./run.sh
 ```
 
-The app opens at http://localhost:8501. Auto-refresh uses Streamlit's built-in autorefresh when available.
+The app opens at http://localhost:8502. Auto-refresh uses Streamlit's built-in autorefresh when available.
 
 ### Basic Workflow
 
@@ -750,7 +750,7 @@ tests/test_integration.py::TestPerformanceBenchmarks::test_batch_insert_performa
 ⏱️ Total Runtime: 1.60 seconds
 🔧 Return Code: 0
 
-� Recommendations:
+Recommendations:
   • All tests passed! Ready for production deployment ✅
   • Consider monitoring performance metrics in production
   • Keep adding more edge case tests for robustness
@@ -1335,7 +1335,7 @@ oc exec -n spark-monitoring deployment/spark-pod-monitor -- \
   python -c "from src.python.modules.database import HistoryManager; print('DB OK')"
 
 # View application logs
-oc logs -n spark-monitoring deployment/spark-pod-monitor --tail=100
+oc logs -n spark-monitoring deployment/spark_pod_monitor --tail=100
 ```
 
 #### **Backup & Recovery**
@@ -1347,107 +1347,3 @@ oc exec -n spark-monitoring deployment/spark-pod-monitor -- \
 # Configuration backup
 oc get configmap,secret -n spark-monitoring -o yaml > backup-config.yaml
 ```
-
-### 📈 **Scaling Considerations**
-
-#### **Horizontal Scaling**
-- **Stateless Application**: Can run multiple replicas with shared storage
-- **Load Balancing**: Use Kubernetes ingress for load balancing
-- **Session Affinity**: Enable sticky sessions for better user experience
-
-#### **Vertical Scaling** 
-- **Memory**: Increase for large historical datasets (512Mi → 1Gi)
-- **CPU**: Increase for high-frequency monitoring (500m → 1000m)
-- **Storage**: Monitor database growth and increase PVC size as needed
-
-## 👥 **Contributing & Support**
-
-### 🤝 **Contributing Guidelines**
-
-We welcome contributions! Please follow these guidelines:
-
-#### **Development Setup**
-1. **Fork the Repository**: Create your own fork of the project
-2. **Clone Locally**: `git clone https://github.com/your-username/Resource-Monitor-App.git`
-3. **Create Branch**: `git checkout -b feature/your-feature-name`
-4. **Install Dependencies**: Follow the [Quick Start Installation](#-quick-start-installation) guide
-5. **Run Tests**: Ensure all tests pass with `python test_runner.py`
-
-#### **Code Standards**
-- **Python Style**: Follow PEP 8 style guidelines
-- **Type Hints**: Use type hints for function parameters and return values
-- **Documentation**: Add docstrings for new functions and classes
-- **Testing**: Add tests for new functionality (maintain 100% test pass rate)
-- **Security**: Follow security best practices for all code changes
-
-#### **Pull Request Process**
-1. **Update Tests**: Ensure new functionality includes comprehensive tests
-2. **Update Documentation**: Update README.md and inline documentation as needed
-3. **Test Coverage**: Verify all tests pass: `python test_runner.py`
-4. **Security Check**: Run security validation for input handling
-5. **Performance Check**: Verify no performance regression
-
-### 📞 **Support & Community**
-
-#### **Getting Help**
-- **📖 Documentation**: Start with this comprehensive README.md
-- **🔍 Issues**: Search existing [GitHub Issues](https://github.com/Theenathayalan-R/Resource-Monitor-App/issues)
-- **🆕 New Issues**: Create detailed bug reports or feature requests
-- **💬 Discussions**: Join community discussions for questions and ideas
-
-#### **Reporting Issues**
-When reporting issues, please include:
-- **Environment**: OS, Python version, Kubernetes/OpenShift version
-- **Configuration**: Relevant configuration settings (redact sensitive information)
-- **Steps to Reproduce**: Detailed steps to reproduce the issue
-- **Expected vs Actual**: What you expected vs what actually happened
-- **Logs**: Relevant log entries (with sensitive information redacted)
-- **Test Results**: Output from `python test_runner.py`
-
-### 📄 **License & Legal**
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-#### **Third-Party Licenses**
-- **Streamlit**: Apache License 2.0
-- **Pandas**: BSD 3-Clause License  
-- **Plotly**: MIT License
-- **Kubernetes Python Client**: Apache License 2.0
-
----
-
-## 🎉 **Conclusion**
-
-The **Spark Pod Resource Monitor** is a production-ready, enterprise-grade solution for monitoring Apache Spark applications on Kubernetes and OpenShift. With comprehensive security, performance optimization, extensive testing, and detailed documentation, this application provides everything needed for effective Spark workload monitoring.
-
-### 🌟 **Key Achievements**
-- ✅ **100% Test Coverage**: 29/29 tests passing with comprehensive coverage
-- 🔒 **Enterprise Security**: Multiple authentication methods and comprehensive input validation
-- ⚡ **Performance Optimized**: Connection pooling, batch processing, and real-time monitoring
-- 📚 **Production Ready**: Complete documentation, deployment guides, and operational procedures
-- 🛡️ **Reliability**: Comprehensive error handling, retry logic, and graceful degradation
-
-### 🚀 **Ready for Production**
-This application has been thoroughly tested and optimized for production environments. It includes all the features, security measures, performance optimizations, and operational procedures needed for enterprise deployment.
-
-**Start monitoring your Spark applications today!** 
-
-```bash
-git clone https://github.com/Theenathayalan-R/Resource-Monitor-App.git
-cd Resource-Monitor-App
-./install.sh           # One-command installation with testing
-./run.sh               # Start monitoring!
-```
-
-### 🔴 **OpenShift & Red Hat Integration**
-
-This application is **optimized for Red Hat OpenShift** environments:
-- ✅ **Native OpenShift CLI Support**: All examples use `oc` commands
-- ✅ **OpenShift Authentication**: Built-in support for OpenShift token-based auth
-- ✅ **Red Hat Certified**: Compatible with Red Hat OpenShift Container Platform
-- ✅ **Enterprise Features**: Service accounts, RBAC, and security contexts
-
----
-
-*Last Updated: September 7, 2025*  
-*Version: 1.0.0 - Production Ready with OpenShift Integration*

@@ -8,10 +8,13 @@ if [ -d "spark-monitor-env" ] && [ -f "spark-monitor-env/bin/activate" ]; then
   source spark-monitor-env/bin/activate || echo "Warning: Failed to activate venv, attempting system Python"
 fi
 
+PORT="${PORT:-8502}"
+ADDRESS="${ADDRESS:-localhost}"
+
 # Prefer venv streamlit if present
 if [ -x "spark-monitor-env/bin/streamlit" ]; then
-  exec spark-monitor-env/bin/streamlit run src/python/spark_monitor.py
+  exec spark-monitor-env/bin/streamlit run src/python/spark_monitor.py --server.port "$PORT" --server.address "$ADDRESS"
 else
   # Fallback to python -m streamlit
-  exec python -m streamlit run src/python/spark_monitor.py
+  exec python -m streamlit run src/python/spark_monitor.py --server.port "$PORT" --server.address "$ADDRESS"
 fi
