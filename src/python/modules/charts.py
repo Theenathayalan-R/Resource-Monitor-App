@@ -183,15 +183,22 @@ def create_historical_timeline_chart(historical_df, pod_name):
 
 
 def create_application_summary_chart(historical_df):
-    """Create application summary chart"""
+    """Create application summary chart sorted by most recent activity"""
     if historical_df.empty:
         return None
 
     app_summary = historical_df.groupby('app_name').agg({
         'cpu_usage': 'mean',
         'memory_usage': 'mean',
-        'pod_name': 'count'
+        'pod_name': 'count',
+        'timestamp': 'max'  # Most recent activity
     }).round(2)
+    
+    # Sort by most recent activity (newest first)
+    app_summary = app_summary.sort_values('timestamp', ascending=False)
+    
+    # Remove timestamp column from the chart data
+    app_summary = app_summary.drop('timestamp', axis=1)
 
     fig = make_subplots(
         rows=1, cols=2,
@@ -218,7 +225,7 @@ def create_application_summary_chart(historical_df):
     )
 
     fig.update_layout(
-        title="Application Resource Summary",
+        title="Application Resource Summary (Sorted by Most Recent Activity)",
         height=420,
         showlegend=True,
         legend=dict(orientation='h', yanchor='top', y=-0.25, x=0.5, xanchor='center'),

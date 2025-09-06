@@ -527,19 +527,32 @@ class HistoryManager:
             }
 
     def list_pod_names(self, namespace: Optional[str] = None) -> List[str]:
-        """Return distinct pod names, optionally filtered by namespace."""
+        """Return distinct pod names sorted by most recent activity (newest first)."""
         try:
             with self._get_connection() as conn:
                 cursor = conn.cursor()
                 if namespace:
-                    cursor.execute(
-                        "SELECT DISTINCT pod_name FROM pod_history WHERE namespace = ? ORDER BY pod_name",
-                        (namespace.strip(),)
-                    )
+                    cursor.execute('''
+                        SELECT DISTINCT pod_name 
+                        FROM pod_history 
+                        WHERE namespace = ? 
+                        ORDER BY (
+                            SELECT MAX(timestamp) 
+                            FROM pod_history ph2 
+                            WHERE ph2.pod_name = pod_history.pod_name 
+                            AND ph2.namespace = pod_history.namespace
+                        ) DESC
+                    ''', (namespace.strip(),))
                 else:
-                    cursor.execute(
-                        "SELECT DISTINCT pod_name FROM pod_history ORDER BY pod_name"
-                    )
+                    cursor.execute('''
+                        SELECT DISTINCT pod_name 
+                        FROM pod_history 
+                        ORDER BY (
+                            SELECT MAX(timestamp) 
+                            FROM pod_history ph2 
+                            WHERE ph2.pod_name = pod_history.pod_name
+                        ) DESC
+                    ''')
                 rows = cursor.fetchall()
                 return [r[0] for r in rows]
         except Exception as e:

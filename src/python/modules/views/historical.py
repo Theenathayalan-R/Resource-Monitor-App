@@ -34,16 +34,46 @@ def render_historical(namespace: str, history_manager, demo_mode: bool):
             unique_apps = historical_df['app_name'].nunique()
             st.metric("Unique Applications", unique_apps)
 
-        # Application overview
+        # Application overview (sorted by most recent activity)
         st.subheader("Application Overview")
         app_summary = historical_df.groupby('app_name').agg({
             'pod_name': 'count',
             'cpu_usage': 'mean',
             'memory_usage': 'mean',
-            'is_active': 'sum'
+            'is_active': 'sum',
+            'timestamp': 'max'  # Most recent activity per app
         }).round(2)
-        app_summary.columns = ['Total Pods', 'Avg CPU Usage', 'Avg Memory Usage (MiB)', 'Active Pods']
+        app_summary.columns = ['Total Pods', 'Avg CPU Usage', 'Avg Memory Usage (MiB)', 'Active Pods', 'Last Activity']
+        
+        # Sort by most recent activity (newest first)
+        app_summary = app_summary.sort_values('Last Activity', ascending=False)
+        
+        # Format the timestamp column
+        app_summary['Last Activity'] = pd.to_datetime(app_summary['Last Activity']).dt.strftime('%Y-%m-%d %H:%M:%S')
+        
         st.dataframe(app_summary, use_container_width=True)
+
+        # Recent Pod Activity (newest first)
+        st.subheader("Recent Pod Activity")
+        
+        # Show the most recent pod records
+        recent_pods = historical_df.head(20).copy()  # Already sorted by timestamp DESC from database
+        
+        if not recent_pods.empty:
+            recent_pods['timestamp'] = pd.to_datetime(recent_pods['timestamp']).dt.strftime('%Y-%m-%d %H:%M:%S')
+            
+            # Select columns to display
+            display_columns = ['timestamp', 'app_name', 'pod_name', 'pod_type', 'status', 
+                             'cpu_usage', 'memory_usage', 'cpu_limit', 'memory_limit']
+            
+            # Filter to only existing columns
+            display_columns = [col for col in display_columns if col in recent_pods.columns]
+            
+            recent_display = recent_pods[display_columns].copy()
+            recent_display.columns = ['Last Updated', 'Application', 'Pod Name', 'Type', 'Status',
+                                    'CPU Usage', 'Memory (MiB)', 'CPU Limit', 'Memory Limit (MiB)'][:len(display_columns)]
+            
+            st.dataframe(recent_display, use_container_width=True)
 
         # Resource usage trends
         st.subheader("Resource Usage Trends")
