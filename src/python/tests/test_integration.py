@@ -42,8 +42,16 @@ class TestIntegration(unittest.TestCase):
         self.temp_db.close()
         self.db_path = self.temp_db.name
         
+        # Create SQLite configuration for testing
+        self.db_config = {
+            'type': 'sqlite',
+            'path': self.db_path,
+            'max_connections': 3,
+            'timeout': 30
+        }
+        
         # Initialize components
-        self.history_manager = HistoryManager(self.db_path)
+        self.history_manager = HistoryManager(self.db_config)
         self.performance_monitor = PerformanceMonitor()
         
         # Test data
@@ -418,7 +426,15 @@ class TestPerformanceBenchmarks(unittest.TestCase):
         self.temp_db = tempfile.NamedTemporaryFile(delete=False)
         self.temp_db.close()
         self.db_path = self.temp_db.name
-        self.history_manager = HistoryManager(self.db_path)
+        
+        # Create SQLite configuration for testing
+        self.db_config = {
+            'type': 'sqlite',
+            'path': self.db_path,
+            'max_connections': 3,
+            'timeout': 30
+        }
+        self.history_manager = HistoryManager(self.db_config)
 
     def tearDown(self):
         """Clean up performance test fixtures"""

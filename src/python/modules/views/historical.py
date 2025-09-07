@@ -22,18 +22,6 @@ def render_historical(namespace: str, history_manager, demo_mode: bool):
     historical_df = history_manager.get_historical_data(namespace, hours_back, app_filter if app_filter else None)
 
     if not historical_df.empty:
-        # Summary statistics
-        st.subheader("Summary Statistics")
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("Total Records", len(historical_df))
-        with col2:
-            active_pods = historical_df[historical_df['is_active'] == 1]
-            st.metric("Active Pods", len(active_pods))
-        with col3:
-            unique_apps = historical_df['app_name'].nunique()
-            st.metric("Unique Applications", unique_apps)
-
         # Application overview (sorted by most recent activity)
         st.subheader("Application Overview")
         app_summary = historical_df.groupby('app_name').agg({
@@ -48,16 +36,58 @@ def render_historical(namespace: str, history_manager, demo_mode: bool):
         # Sort by most recent activity (newest first)
         app_summary = app_summary.sort_values('Last Activity', ascending=False)
         
+        # Store the sorted app names before formatting timestamps
+        sorted_app_names = app_summary.index.tolist()
+        
         # Format the timestamp column
         app_summary['Last Activity'] = pd.to_datetime(app_summary['Last Activity']).dt.strftime('%Y-%m-%d %H:%M:%S')
         
         st.dataframe(app_summary, use_container_width=True)
 
-        # Recent Pod Activity (newest first)
-        st.subheader("Recent Pod Activity")
+        # Application selection for detailed view (sorted by newest activity first)
+        selected_app = st.selectbox(
+            "🔍 Select Application for Detailed Analysis:",
+            options=['All Applications'] + sorted_app_names,
+            key="app_select_historical"
+        )
+
+        # Filter data based on selection
+        if selected_app and selected_app != 'All Applications':
+            filtered_df = historical_df[historical_df['app_name'] == selected_app].copy()
+            st.info(f"📊 Showing detailed analysis for application: **{selected_app}**")
+        else:
+            filtered_df = historical_df.copy()
+
+        # Summary statistics (updated based on selection)
+        if selected_app != 'All Applications':
+            st.subheader(f"Summary Statistics - {selected_app}")
+            stats_df = filtered_df
+        else:
+            st.subheader("Summary Statistics")
+            stats_df = historical_df
+            
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Total Records", len(stats_df))
+        with col2:
+            active_pods = stats_df[stats_df['is_active'] == 1] if 'is_active' in stats_df.columns else stats_df
+            st.metric("Active Pods", len(active_pods))
+        with col3:
+            if selected_app != 'All Applications':
+                unique_pods = stats_df['pod_name'].nunique()
+                st.metric("Unique Pods", unique_pods)
+            else:
+                unique_apps = stats_df['app_name'].nunique()
+                st.metric("Unique Applications", unique_apps)
+
+        # Recent Pod Activity (filtered based on selection)
+        if selected_app != 'All Applications':
+            st.subheader(f"Recent Pod Activity - {selected_app}")
+        else:
+            st.subheader("Recent Pod Activity")
         
-        # Show the most recent pod records
-        recent_pods = historical_df.head(20).copy()  # Already sorted by timestamp DESC from database
+        # Show the most recent pod records (filtered)
+        recent_pods = filtered_df.head(20).copy()  # Already sorted by timestamp DESC from database
         
         if not recent_pods.empty:
             recent_pods['timestamp'] = pd.to_datetime(recent_pods['timestamp']).dt.strftime('%Y-%m-%d %H:%M:%S')
@@ -75,11 +105,59 @@ def render_historical(namespace: str, history_manager, demo_mode: bool):
             
             st.dataframe(recent_display, use_container_width=True)
 
-        # Resource usage trends
-        st.subheader("Resource Usage Trends")
-        fig = create_application_summary_chart(historical_df)
+            # Pod-level detailed analysis
+            if selected_app != 'All Applications':
+                st.subheader(f"Pod Details - {selected_app}")
+                
+                # Get unique pods for the selected app, sorted by most recent activity
+                app_pods_df = filtered_df.groupby('pod_name')['timestamp'].max().sort_values(ascending=False)
+                app_pods_sorted = app_pods_df.index.tolist()
+                
+                selected_pod = st.selectbox(
+                    "Select specific pod for timeline:",
+                    options=['All Pods'] + app_pods_sorted,
+                    key="pod_select_detailed"
+                )
+
+                if selected_pod != 'All Pods':
+                    pod_specific_df = filtered_df[filtered_df['pod_name'] == selected_pod].copy()
+                    
+                    if not pod_specific_df.empty:
+                        # Pod timeline chart
+                        fig = create_historical_timeline_chart(pod_specific_df, selected_pod)
+                        if fig:
+                            st.plotly_chart(fig, use_container_width=True)
+                        
+                        # Pod statistics
+                        col1, col2, col3, col4 = st.columns(4)
+                        with col1:
+                            st.metric("Records", len(pod_specific_df))
+                        with col2:
+                            avg_cpu = pod_specific_df['cpu_usage'].mean()
+                            st.metric("Avg CPU", f"{avg_cpu:.3f}")
+                        with col3:
+                            avg_mem = pod_specific_df['memory_usage'].mean()
+                            st.metric("Avg Memory", f"{avg_mem:.0f} MiB")
+                        with col4:
+                            cpu_util = (pod_specific_df['cpu_usage'] / pod_specific_df['cpu_limit'].replace(0, 1)).mean() * 100
+                            st.metric("Avg CPU Util", f"{cpu_util:.1f}%")
+        else:
+            if selected_app != 'All Applications':
+                st.info(f"No recent activity found for application: {selected_app}")
+            else:
+                st.info("No recent pod activity found.")
+
+        # Resource usage trends (filtered based on selection)
+        if selected_app != 'All Applications':
+            st.subheader(f"Resource Usage Trends - {selected_app}")
+        else:
+            st.subheader("Resource Usage Trends")
+            
+        fig = create_application_summary_chart(filtered_df)
         if fig:
             st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("No data available for resource usage trends chart.")
     else:
         st.info("No historical data found for the selected time range.")
 

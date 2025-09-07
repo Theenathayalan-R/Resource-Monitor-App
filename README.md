@@ -11,7 +11,7 @@ A **production-ready**, enterprise-grade Streamlit application for monitoring Ap
 ### 🔒 **Enterprise Security & Validation**
 - **🛡️ Input Sanitization**: Complete protection against SQL injection and malicious inputs
 - **🔐 Secure Token Management**: Multiple secure token input methods with validation
-- **✅ Configuration Validation**: Comprehensive validation for all parameters and URLs
+- **✅ Configuration Validation**: Comprehensive YAML configuration validation with environment-specific settings
 - **🔍 Real-time Validation**: Immediate feedback on configuration errors with user-friendly messages
 
 ### 📊 **Advanced Performance Monitoring**
@@ -59,7 +59,7 @@ A **production-ready**, enterprise-grade Streamlit application for monitoring Ap
 - ⏰ **Smart Pod Filtering** - Configurable time-based filtering (1h-7d) to show pods by creation age, with default 1-hour window for optimal performance
 
 ### Historical Analysis & Data Persistence
-- 💾 **Enhanced SQLite Storage** - WAL mode with connection pooling for optimal performance
+- 💾 **Dual Database Support** - SQLite (development) and Oracle (production) with connection pooling
 - 📈 **Time-Series Data Collection** - Automatic data capture every 30 seconds (configurable) with timestamped records
 - 🕒 **Ephemeral Pod Tracking** - Captures data from terminated executor pods before they disappear
 - 📤 **Flexible Data Export** - JSON/CSV export with date filtering and compression options
@@ -91,8 +91,10 @@ Resource-Monitor-App/
 ├── 📁 src/python/
 │   ├── 🐍 spark_monitor.py              # Application entry point
 │   ├── 📁 modules/                      # Core application modules
-│   │   ├── 🔧 config.py                # Environment & configuration management
-│   │   ├── 🗄️ database.py              # SQLite operations with connection pooling
+│   │   ├── 🔧 config.py                # Legacy configuration (deprecated)
+│   │   ├── 🔧 config_loader.py         # YAML-based environment configuration
+│   │   ├── 🗄️ database.py              # Dual database support (SQLite/Oracle)
+│   │   ├── 🗄️ oracle_adapter.py        # Oracle database adapter with connection pooling
 │   │   ├── ☸️ kubernetes_client.py     # Kubernetes API client with retry logic
 │   │   ├── 🛠️ utils.py                 # Resource parsing & utility functions  
 │   │   ├── 📊 charts.py               # Plotly chart generation & styling
@@ -109,6 +111,10 @@ Resource-Monitor-App/
 │   └── 🏃 test_runner.py               # Automated test execution framework
 ├── 📁 docs/                            # Documentation
 │   └── 📖 DEVELOPER_GUIDE.md          # Comprehensive developer documentation
+├── 📁 config/                          # Environment configuration
+│   ├── 📄 environments.yaml           # YAML configuration for all environments
+│   ├── 📖 README.md                   # Configuration guide and examples
+│   └── 🧪 setup_environment.sh        # Automated environment setup script
 ├── 📁 logs/                            # Application logs (auto-created)
 ├── 🐳 Dockerfile                       # Container deployment configuration
 ├── 📋 requirements.txt                 # Python dependencies with version pinning
@@ -207,6 +213,7 @@ graph TB
 
 ### System Requirements
 - **Python**: 3.8+ (tested with 3.8, 3.9, 3.10, 3.11, 3.12, 3.13)
+- **Python Command**: Automatic detection of `python3` or `python` command (scripts support both)
 - **Platform**: macOS, Linux, Windows (WSL recommended)
 - **Memory**: 512MB RAM minimum, 1GB+ recommended for large datasets
 - **Storage**: 100MB minimum, varies with historical data retention
@@ -265,15 +272,18 @@ pandas>=2.0.0,<3.0.0             # Data manipulation and analysis
 
 # OpenShift/Kubernetes Integration
 kubernetes>=27.2.0,<34.0.0       # Official Kubernetes Python client (compatible with OpenShift)
-PyYAML>=6.0,<7.0                 # YAML parsing for kubeconfig
+PyYAML>=6.0,<7.0                 # YAML configuration parsing (required)
 requests>=2.31.0,<3.0.0          # HTTP client with security updates
+
+# Database Support
+oracledb>=2.0.0,<3.0.0           # Modern Oracle database driver
 
 # Performance & Reliability
 psutil>=5.9.0,<6.0.0             # System performance monitoring
 tenacity>=8.2.0,<9.0.0           # Retry logic with exponential backoff
 
 # Built-in Modules (No Installation Required)
-# sqlite3                        # Database operations
+# sqlite3                        # SQLite database operations
 # logging                        # Application logging  
 # datetime                       # Date/time handling
 # json                           # JSON parsing
@@ -310,10 +320,11 @@ chmod +x install.sh
 
 **✨ What install.sh does:**
 - ✅ **Environment Setup**: Creates and activates `spark-monitor-env` virtual environment
-- ✅ **Dependency Installation**: Installs all required packages from `requirements.txt`
+- ✅ **Dependency Installation**: Installs all required packages including PyYAML and oracledb
+- ✅ **Configuration Setup**: Creates config directory and example YAML configuration
 - ✅ **Development Tools**: Installs pytest, coverage tools, memory profiler, watchdog
 - ✅ **Verification**: Tests all package imports and core functionality  
-- ✅ **Comprehensive Testing**: Runs all 29 tests to ensure everything works
+- ✅ **Comprehensive Testing**: Runs all tests to ensure everything works
 - ✅ **Project Structure**: Sets up logs directory and configuration
 - ✅ **Ready to Use**: Provides clear next steps and usage instructions
 
@@ -422,7 +433,98 @@ After installation, verify your setup:
 
 ## ⚙️ Configuration Guide
 
-### Environment Variables (Production)
+### 🔧 **YAML-Based Configuration System**
+
+The application now uses a modern, environment-based YAML configuration system that supports multiple SDLC environments with different database backends.
+
+#### **Configuration File Structure**
+```yaml
+# config/environments.yaml
+environments:
+  development:
+    database:
+      type: sqlite
+      path: "spark_pods_history.db"
+      max_connections: 3
+    kubernetes:
+      namespace: "spark-dev"
+    logging:
+      level: DEBUG
+      
+  staging:
+    database:
+      type: oracle  # or sqlite
+      oracle:
+        host: "oracle-staging.company.com"
+        port: 1521
+        service_name: "SPARKMON_STAGE"
+        username: "spark_monitor"
+        pool_size: 5
+    kubernetes:
+      namespace: "spark-staging"
+    logging:
+      level: INFO
+      
+  production:
+    database:
+      type: oracle
+      oracle:
+        host: "oracle-prod.company.com"
+        port: 1521
+        service_name: "SPARKMON_PROD"
+        username: "spark_monitor"
+        pool_size: 10
+    kubernetes:
+      namespace: "spark-prod"
+    logging:
+      level: INFO
+```
+
+#### **Environment Selection**
+```bash
+# Set environment (defaults to 'development')
+export ENVIRONMENT=production
+
+# Or use custom config file
+export CONFIG_FILE=/path/to/custom-config.yaml
+```
+
+#### **Database Configuration**
+
+**SQLite (Development)**
+```yaml
+database:
+  type: sqlite
+  path: "spark_pods_history.db"
+  max_connections: 3
+  timeout: 30
+```
+
+**Oracle (Production)**
+```yaml
+database:
+  type: oracle
+  oracle:
+    host: "oracle-server.company.com"
+    port: 1521
+    service_name: "SPARKMON"
+    username: "spark_monitor"
+    # Password via ORACLE_PASSWORD environment variable
+    pool_size: 10
+    pool_increment: 2
+    pool_max: 50
+```
+
+#### **Environment Variables for Sensitive Data**
+```bash
+# Oracle database password (required for Oracle)
+export ORACLE_PASSWORD="your-secure-password"
+
+# Kubernetes authentication token
+export KUBERNETES_TOKEN="your-service-account-token"
+```
+
+### Environment Variables (Legacy - Still Supported)
 
 | Variable | Description | Default | Example |
 |----------|-------------|---------|---------|
@@ -452,74 +554,138 @@ After installation, verify your setup:
 
 ### Production Configuration Example
 
-Create a `.env` file in the project root:
+Create a production YAML configuration:
 
+```yaml
+# config/environments.yaml - Production Example
+environments:
+  production:
+    # Oracle database for production
+    database:
+      type: oracle
+      oracle:
+        host: "oracle-prod.company.com"
+        port: 1521
+        service_name: "SPARKMON_PROD"
+        username: "spark_monitor"
+        pool_size: 20
+        pool_increment: 5
+        pool_max: 100
+        
+    # Kubernetes configuration
+    kubernetes:
+      namespace: "spark-prod"
+      config_type: cluster
+      
+    # API configuration
+    api:
+      base_url: "https://api.company.com"
+      timeout: 60
+      retry_attempts: 10
+      
+    # Production logging
+    logging:
+      level: INFO
+      file: "/var/log/spark_monitor/application.log"
+      max_size_mb: 100
+      backup_count: 30
+      
+    # Data retention
+    data_retention:
+      history_days: 90
+      cleanup_interval_hours: 24
+      
+    # Monitoring configuration  
+    monitoring:
+      refresh_interval: 120
+      metrics_enabled: true
+      alerts_enabled: true
+      alert_thresholds:
+        cpu_usage: 70
+        memory_usage: 75
+```
+
+Set environment variables for sensitive data:
 ```bash
-# Production Environment Configuration for Spark Pod Monitor
-# Updated: September 6, 2025
+# Required for Oracle database
+export ORACLE_PASSWORD="secure-production-password"
+export ENVIRONMENT=production
 
-# === Core Database Configuration ===
-DB_PATH=/data/production/spark_pods_history.db
-HISTORY_RETENTION_DAYS=30
-MAX_DB_CONNECTIONS=10
-DB_TIMEOUT_SECONDS=60
-
-# === Kubernetes Configuration ===
-DEFAULT_NAMESPACE=production-spark
-TLS_VERIFY=true
-DEFAULT_REFRESH_INTERVAL=60
-
-# === Logging Configuration ===
-LOG_LEVEL=INFO
-LOG_FILE=/var/log/spark_monitor/application.log
-MAX_LOG_SIZE_MB=100
-LOG_RETENTION_COUNT=10
-
-# === Performance Monitoring ===
-ENABLE_PERFORMANCE_MONITORING=true
-PERFORMANCE_MONITORING_INTERVAL=30
-
-# === Production Performance Thresholds ===
-CPU_WARNING_THRESHOLD=80.0
-CPU_CRITICAL_THRESHOLD=95.0
-MEMORY_WARNING_THRESHOLD=85.0
-MEMORY_CRITICAL_THRESHOLD=95.0
-RESPONSE_TIME_WARNING_MS=5000.0
-RESPONSE_TIME_CRITICAL_MS=15000.0
-
-# === Security Configuration ===
-# Set to false only in development environments with self-signed certificates
-TLS_VERIFY=true
+# Start application
+./run.sh
 ```
 
 ### Development Configuration Example
 
 For development/testing environments:
 
-```bash
-# Development Environment Configuration
-# This configuration prioritizes debugging and development convenience
-
-# === Development Database ===
-DB_PATH=./dev_spark_pods.db
-HISTORY_RETENTION_DAYS=3
-MAX_DB_CONNECTIONS=3
-
-# === Debug Logging ===
-LOG_LEVEL=DEBUG
-LOG_FILE=./logs/dev_spark_monitor.log
-MAX_LOG_SIZE_MB=10
-
-# === Development Performance ===
-ENABLE_PERFORMANCE_MONITORING=true
-PERFORMANCE_MONITORING_INTERVAL=5
-CPU_WARNING_THRESHOLD=50.0
-MEMORY_WARNING_THRESHOLD=60.0
-
-# === Development Network ===
-TLS_VERIFY=false  # OK for development with self-signed certs
-DEFAULT_REFRESH_INTERVAL=15
+```yaml
+# config/environments.yaml - Development Example
+environments:
+  development:
+    # SQLite for development
+    database:
+      type: sqlite
+      path: "dev_spark_pods.db"
+      max_connections: 3
+      timeout: 30
+      
+    # Development Kubernetes
+    kubernetes:
+      namespace: "spark-dev"
+      config_type: local
+      
+    # Debug logging
+    logging:
+      level: DEBUG
+      file: "logs/dev_spark_monitor.log"
+      max_size_mb: 10
+      backup_count: 3
+      
+    # Shorter data retention for dev
+    data_retention:
+      history_days: 3
+      
+    # Faster refresh for development
+    monitoring:
+      refresh_interval: 15
+      metrics_enabled: true
+      alerts_enabled: false
 ```
+
+Set environment for development:
+```bash
+export ENVIRONMENT=development  # Optional, this is the default
+./run.sh
+```
+
+### Configuration Testing
+
+Test your configuration:
+```bash
+# Run configuration system test
+python test_config_system.py
+
+# Expected output:
+# ✅ PASS Configuration Loading
+# ✅ PASS Database Initialization  
+# ✅ PASS Environment Setup
+# ✅ PASS YAML Support
+```
+
+### 🚀 **Configuration System Migration**
+
+**New YAML-Based System Benefits:**
+- **🔧 Environment-Specific**: Different settings for dev/staging/production
+- **🗄️ Dual Database Support**: SQLite for development, Oracle for production  
+- **📝 Better Readability**: Human-readable YAML format
+- **🔒 Secure**: Sensitive data via environment variables
+- **✅ Validation**: Built-in configuration validation and error reporting
+
+**Migration from Environment Variables:**
+The application still supports legacy environment variable configuration, but the new YAML system is recommended for new deployments.
+
+For detailed configuration documentation, see: `config/README.md`
 
 ### Token Input Configuration
 

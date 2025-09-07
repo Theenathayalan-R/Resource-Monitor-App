@@ -28,6 +28,40 @@ warn() { echo -e "${YELLOW}⚠️  $1${NC}"; }
 err() { echo -e "${RED}${CROSS} $1${NC}"; }
 info() { echo -e "${CYAN}${INFO} $1${NC}"; }
 
+# Function to detect the best Python executable
+detect_python() {
+    local python_cmd=""
+    
+    # Check for python3 first (preferred)
+    if command -v python3 &> /dev/null; then
+        local version=$(python3 --version 2>&1 | cut -d' ' -f2 2>/dev/null || echo "0.0.0")
+        local major=$(echo $version | cut -d'.' -f1)
+        local minor=$(echo $version | cut -d'.' -f2)
+        
+        if [ "$major" -ge 3 ] && [ "$minor" -ge 8 ]; then
+            python_cmd="python3"
+        fi
+    fi
+    
+    # If python3 not suitable, check python command
+    if [ -z "$python_cmd" ] && command -v python &> /dev/null; then
+        local version=$(python --version 2>&1 | cut -d' ' -f2 2>/dev/null || echo "0.0.0")
+        local major=$(echo $version | cut -d'.' -f1)
+        local minor=$(echo $version | cut -d'.' -f2)
+        
+        if [ "$major" -ge 3 ] && [ "$minor" -ge 8 ]; then
+            python_cmd="python"
+        fi
+    fi
+    
+    if [ -z "$python_cmd" ]; then
+        err "Python 3.8+ not found. Please install Python 3.8 or higher"
+        exit 1
+    fi
+    
+    echo "$python_cmd"
+}
+
 # Determine paths
 ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SRC_DIR="$ROOT_DIR/src/python"
@@ -43,8 +77,10 @@ else
   warn "Virtual environment not found, using system Python"
 fi
 
-PYTHON_BIN="${PYTHON:-${VIRTUAL_ENV:+$VIRTUAL_ENV/bin/python}}"
-PYTHON_BIN="${PYTHON_BIN:-python3}"
+# Detect the best Python executable
+PYTHON_BIN=$(detect_python)
+PYTHON_VERSION=$($PYTHON_BIN --version 2>&1 | cut -d' ' -f2)
+ok "Using Python executable: $PYTHON_BIN (version $PYTHON_VERSION)"
 
 # Validate pytest is available
 section "Dependency Check"

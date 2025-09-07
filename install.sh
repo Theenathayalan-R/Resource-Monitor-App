@@ -46,14 +46,86 @@ print_error() {
     echo -e "${RED}${CROSS} $1${NC}"
 }
 
+# Function to detect virtual environment activation script path
+detect_venv_activate() {
+    local venv_name="$1"
+    
+    # Check for Unix/Linux/macOS structure (bin/activate)
+    if [ -f "$venv_name/bin/activate" ]; then
+        echo "$venv_name/bin/activate"
+    # Check for Windows Git Bash structure (Scripts/activate)
+    elif [ -f "$venv_name/Scripts/activate" ]; then
+        echo "$venv_name/Scripts/activate"
+    else
+        echo ""
+    fi
+}
+
+# Function to detect Python executable in virtual environment
+detect_venv_python() {
+    local venv_name="$1"
+    
+    # Check for Unix/Linux/macOS structure (bin/python)
+    if [ -f "$venv_name/bin/python" ]; then
+        echo "$venv_name/bin/python"
+    # Check for Windows Git Bash structure (Scripts/python.exe)
+    elif [ -f "$venv_name/Scripts/python.exe" ]; then
+        echo "$venv_name/Scripts/python.exe"
+    # Check for Windows Git Bash structure (Scripts/python)
+    elif [ -f "$venv_name/Scripts/python" ]; then
+        echo "$venv_name/Scripts/python"
+    else
+        echo ""
+    fi
+}
+
 # Function to print warning messages
 print_warning() {
     echo -e "${YELLOW}${WARNING} $1${NC}"
 }
 
-# Function to print info messages
+# Function to print info messages  
 print_info() {
     echo -e "${CYAN}${INFO} $1${NC}"
+}# Function to detect the best Python executable
+detect_python() {
+    local python_cmd=""
+    local found_version=""
+    
+    # Check for python3 first (preferred)
+    if command -v python3 &> /dev/null; then
+        local version=$(python3 --version 2>&1 | cut -d' ' -f2)
+        local major=$(echo $version | cut -d'.' -f1)
+        local minor=$(echo $version | cut -d'.' -f2)
+        
+        if [ "$major" -ge 3 ] && [ "$minor" -ge 8 ]; then
+            python_cmd="python3"
+            found_version="$version"
+        fi
+    fi
+    
+    # If python3 not suitable, check python command
+    if [ -z "$python_cmd" ] && command -v python &> /dev/null; then
+        local version=$(python --version 2>&1 | cut -d' ' -f2)
+        local major=$(echo $version | cut -d'.' -f1)
+        local minor=$(echo $version | cut -d'.' -f2)
+        
+        if [ "$major" -ge 3 ] && [ "$minor" -ge 8 ]; then
+            python_cmd="python"
+            found_version="$version"
+        else
+            print_warning "Found Python $version (python), but requires 3.8+"
+        fi
+    fi
+    
+    if [ -z "$python_cmd" ]; then
+        print_error "Python 3.8+ not found. Please install Python 3.8 or higher"
+        print_info "Tried: python3, python"
+        exit 1
+    fi
+    
+    print_success "Found Python 3 ($found_version): $python_cmd"
+    echo "$python_cmd"
 }
 
 # Check if we're in the right directory
@@ -69,22 +141,9 @@ print_success "Found Resource-Monitor-App project files"
 # Check Python version
 print_section "${GEAR} Checking Python Environment"
 
-if ! command -v python3 &> /dev/null; then
-    print_error "Python 3 is not installed or not in PATH"
-    print_info "Please install Python 3.8 or higher"
-    exit 1
-fi
-
-PYTHON_VERSION=$(python3 --version 2>&1 | cut -d' ' -f2)
-PYTHON_MAJOR=$(echo $PYTHON_VERSION | cut -d'.' -f1)
-PYTHON_MINOR=$(echo $PYTHON_VERSION | cut -d'.' -f2)
-
-if [ "$PYTHON_MAJOR" -lt 3 ] || ([ "$PYTHON_MAJOR" -eq 3 ] && [ "$PYTHON_MINOR" -lt 8 ]); then
-    print_error "Python 3.8+ required, found Python $PYTHON_VERSION"
-    exit 1
-fi
-
-print_success "Python $PYTHON_VERSION detected"
+# Detect the best Python executable
+PYTHON_CMD=$(detect_python | tail -1)  # Get only the last line (the command)
+PYTHON_VERSION=$($PYTHON_CMD --version 2>&1 | cut -d' ' -f2)
 
 # Check if virtual environment exists
 print_section "${PACKAGE} Setting Up Virtual Environment"
@@ -103,7 +162,7 @@ fi
 # Create virtual environment if it doesn't exist
 if [ ! -d "$VENV_NAME" ]; then
     print_info "Creating virtual environment '$VENV_NAME'..."
-    python3 -m venv "$VENV_NAME"
+    $PYTHON_CMD -m venv "$VENV_NAME"
     if [ $? -eq 0 ]; then
         print_success "Virtual environment created successfully"
     else
@@ -114,12 +173,20 @@ fi
 
 # Activate virtual environment
 print_info "Activating virtual environment..."
-source "$VENV_NAME/bin/activate"
+ACTIVATE_SCRIPT=$(detect_venv_activate "$VENV_NAME")
 
-if [ "$VIRTUAL_ENV" ]; then
-    print_success "Virtual environment activated: $VIRTUAL_ENV"
+if [ -n "$ACTIVATE_SCRIPT" ]; then
+    source "$ACTIVATE_SCRIPT"
+    
+    if [ "$VIRTUAL_ENV" ] || [ "$CONDA_DEFAULT_ENV" ] || [ -n "$(which python | grep "$VENV_NAME")" ]; then
+        print_success "Virtual environment activated: ${VIRTUAL_ENV:-$VENV_NAME}"
+    else
+        print_error "Failed to activate virtual environment"
+        exit 1
+    fi
 else
-    print_error "Failed to activate virtual environment"
+    print_error "Could not find virtual environment activation script"
+    print_info "Looked for: $VENV_NAME/bin/activate and $VENV_NAME/Scripts/activate"
     exit 1
 fi
 
@@ -260,7 +327,13 @@ print_section "${INFO} Next Steps"
 echo -e "${CYAN}To start using the Spark Pod Resource Monitor:${NC}"
 echo ""
 echo -e "${YELLOW}1. Activate the virtual environment:${NC}"
-echo -e "   ${CYAN}source $VENV_NAME/bin/activate${NC}"
+ACTIVATE_PATH=$(detect_venv_activate "$VENV_NAME")
+if [ -n "$ACTIVATE_PATH" ]; then
+    echo -e "   ${CYAN}source $ACTIVATE_PATH${NC}"
+else
+    echo -e "   ${CYAN}source $VENV_NAME/bin/activate${NC}  ${YELLOW}# Unix/Linux/macOS${NC}"
+    echo -e "   ${CYAN}source $VENV_NAME/Scripts/activate${NC}  ${YELLOW}# Windows Git Bash${NC}"
+fi
 echo ""
 echo -e "${YELLOW}2. Start the application:${NC}"
 echo -e "   ${CYAN}./run.sh${NC}"
@@ -290,5 +363,10 @@ echo -e "${GREEN}===========================================${NC}"
 if [ "$VIRTUAL_ENV" ]; then
     echo -e "${GREEN}${INFO} Virtual environment is active and ready to use${NC}"
 else
-    print_warning "Virtual environment was deactivated - run 'source $VENV_NAME/bin/activate' before using the app"
+    ACTIVATE_PATH=$(detect_venv_activate "$VENV_NAME")
+    if [ -n "$ACTIVATE_PATH" ]; then
+        print_warning "Virtual environment was deactivated - run 'source $ACTIVATE_PATH' before using the app"
+    else
+        print_warning "Virtual environment was deactivated - activate it before using the app"
+    fi
 fi

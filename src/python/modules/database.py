@@ -1,63 +1,158 @@
 """
 Database operations for Spark Pod Resource Monitor
+Supports both SQLite and Oracle databases with unified interface
 """
 import sqlite3
 import pandas as pd
 import json
 import logging
+import os
 from datetime import datetime
 from typing import List, Tuple, Optional, Dict, Any
 from contextlib import contextmanager
-from config import DB_PATH, HISTORY_RETENTION_DAYS, MAX_DB_CONNECTIONS
 from logging_config import DatabaseError, log_performance
 from performance import monitor_performance, DatabaseConnectionPool, get_performance_monitor
 from validation import sanitize_pod_name
 
+# Try to import configuration, fall back to defaults if not available
+try:
+    from config_loader import get_config
+    config = get_config()
+    
+    # Database settings from config
+    db_config = config.get('database', {})
+    DB_TYPE = db_config.get('type', 'sqlite').lower()
+    
+    if DB_TYPE == 'sqlite':
+        DB_PATH = db_config.get('sqlite', {}).get('path', 'spark_pods_history.db')
+        MAX_DB_CONNECTIONS = db_config.get('sqlite', {}).get('max_connections', 5)
+    elif DB_TYPE == 'oracle':
+        ORACLE_CONFIG = db_config.get('oracle', {})
+        MAX_DB_CONNECTIONS = ORACLE_CONFIG.get('max_connections', 10)
+    
+    # Data retention settings
+    retention_config = config.get('data_retention', {})
+    HISTORY_RETENTION_DAYS = retention_config.get('history_days', 7)
+    
+except ImportError:
+    # Fallback to environment variables if new config system not available
+    DB_TYPE = 'sqlite'
+    DB_PATH = os.getenv('DB_PATH', 'spark_pods_history.db')
+    MAX_DB_CONNECTIONS = int(os.getenv('MAX_DB_CONNECTIONS', '5'))
+    HISTORY_RETENTION_DAYS = int(os.getenv('HISTORY_RETENTION_DAYS', '7'))
+
+# Import Oracle adapter if needed
+if DB_TYPE == 'oracle':
+    try:
+        from oracle_adapter import OracleAdapter
+    except ImportError:
+        DB_TYPE = 'sqlite'  # Fall back to SQLite if Oracle adapter not available
+        logging.warning("Oracle adapter not available, falling back to SQLite")
+
 logger = logging.getLogger(__name__)
 
 
+def get_database_config():
+    """Get database configuration based on type"""
+    if DB_TYPE == 'sqlite':
+        return {
+            'type': 'sqlite',
+            'path': DB_PATH,
+            'max_connections': MAX_DB_CONNECTIONS
+        }
+    elif DB_TYPE == 'oracle':
+        return {
+            'type': 'oracle',
+            'config': ORACLE_CONFIG if 'ORACLE_CONFIG' in globals() else {},
+            'max_connections': MAX_DB_CONNECTIONS
+        }
+    else:
+        raise DatabaseError(f"Unsupported database type: {DB_TYPE}")
+
+
 class HistoryManager:
-    def __init__(self, db_path=DB_PATH):
-        self.db_path = db_path
-        self.connection_pool = DatabaseConnectionPool(db_path, MAX_DB_CONNECTIONS)
+    def __init__(self, db_config=None):
+        if db_config is None:
+            db_config = get_database_config()
+        
+        self.db_type = db_config['type']
+        self.db_config = db_config
+        
+        if self.db_type == 'sqlite':
+            self.db_path = db_config['path']
+            self.connection_pool = DatabaseConnectionPool(self.db_path, db_config['max_connections'])
+            self.oracle_adapter = None
+        elif self.db_type == 'oracle':
+            oracle_config = db_config['config']
+            if 'OracleAdapter' in globals():
+                self.oracle_adapter = OracleAdapter(
+                    host=oracle_config['host'],
+                    port=oracle_config['port'],
+                    service_name=oracle_config['service_name'],
+                    username=oracle_config['username'],
+                    password=oracle_config['password'],
+                    max_connections=db_config['max_connections']
+                )
+            else:
+                raise DatabaseError("Oracle adapter not available")
+            self.connection_pool = None
+            self.db_path = None
+        else:
+            raise DatabaseError(f"Unsupported database type: {self.db_type}")
+        
         self.init_database()
-        logger.info(f"HistoryManager initialized with database: {db_path}")
+        logger.info(f"HistoryManager initialized with {self.db_type} database")
 
     @contextmanager
     def _get_connection(self):
         """Context manager for database connections with proper error handling"""
-        conn = None
-        try:
-            conn = self.connection_pool.get_connection()
-            if conn is None:
-                raise DatabaseError("Could not obtain database connection from pool")
-            
-            # Record database operation for performance monitoring
-            get_performance_monitor().record_db_operation()
-            
-            yield conn
-            
-        except sqlite3.Error as e:
-            if conn:
-                conn.rollback()
-            logger.error(f"Database error: {str(e)}", exc_info=True)
-            raise DatabaseError(f"Database operation failed: {str(e)}") from e
-        except Exception as e:
-            if conn:
-                conn.rollback()
-            logger.error(f"Unexpected error in database operation: {str(e)}", exc_info=True)
-            raise DatabaseError(f"Unexpected database error: {str(e)}") from e
-        finally:
-            if conn:
-                try:
-                    conn.commit()
-                    self.connection_pool.return_connection(conn)
-                except Exception as e:
-                    logger.warning(f"Error returning connection to pool: {str(e)}")
+        if self.db_type == 'oracle' and self.oracle_adapter:
+            # Use Oracle adapter's connection manager
+            with self.oracle_adapter._get_connection() as conn:
+                yield conn
+        else:
+            # Use SQLite connection pool
+            conn = None
+            try:
+                if self.connection_pool:
+                    conn = self.connection_pool.get_connection()
+                    if conn is None:
+                        raise DatabaseError("Could not obtain database connection from pool")
+                else:
+                    raise DatabaseError("Connection pool not initialized")
+                
+                # Record database operation for performance monitoring
+                get_performance_monitor().record_db_operation()
+                
+                yield conn
+                
+            except sqlite3.Error as e:
+                if conn:
+                    conn.rollback()
+                logger.error(f"Database error: {str(e)}", exc_info=True)
+                raise DatabaseError(f"Database operation failed: {str(e)}") from e
+            except Exception as e:
+                if conn:
+                    conn.rollback()
+                logger.error(f"Unexpected error in database operation: {str(e)}", exc_info=True)
+                raise DatabaseError(f"Unexpected database error: {str(e)}") from e
+            finally:
+                if conn and self.connection_pool:
+                    try:
+                        conn.commit()
+                        self.connection_pool.return_connection(conn)
+                    except Exception as e:
+                        logger.warning(f"Error returning connection to pool: {str(e)}")
 
     @monitor_performance("database")
     def init_database(self):
-        """Initialize SQLite database for storing pod history"""
+        """Initialize database for storing pod history"""
+        if self.db_type == 'oracle' and self.oracle_adapter:
+            # Oracle adapter handles its own initialization
+            logger.info("Oracle database initialized via adapter")
+            return
+            
+        # SQLite initialization
         try:
             with self._get_connection() as conn:
                 cursor = conn.cursor()
@@ -409,13 +504,14 @@ class HistoryManager:
             # Run VACUUM outside of transaction context
             try:
                 # Get a fresh connection for VACUUM operation
-                vacuum_conn = self.connection_pool.get_connection()
-                if vacuum_conn:
-                    vacuum_conn.isolation_level = None  # Enable autocommit mode
-                    cursor = vacuum_conn.cursor()
-                    cursor.execute('VACUUM')
-                    cursor.execute('PRAGMA optimize')
-                    self.connection_pool.return_connection(vacuum_conn)
+                if self.connection_pool:
+                    vacuum_conn = self.connection_pool.get_connection()
+                    if vacuum_conn:
+                        vacuum_conn.isolation_level = None  # Enable autocommit mode
+                        cursor = vacuum_conn.cursor()
+                        cursor.execute('VACUUM')
+                        cursor.execute('PRAGMA optimize')
+                        self.connection_pool.return_connection(vacuum_conn)
             except Exception as vacuum_error:
                 logger.warning(f"Database optimization failed: {str(vacuum_error)}")
 
@@ -562,7 +658,10 @@ class HistoryManager:
     def close(self):
         """Close database connections and cleanup"""
         try:
-            self.connection_pool.close_all()
+            if self.db_type == 'oracle' and self.oracle_adapter:
+                self.oracle_adapter.close()
+            elif self.connection_pool:
+                self.connection_pool.close_all()
             logger.info("Database connections closed successfully")
         except Exception as e:
             logger.error(f"Error closing database connections: {str(e)}")
