@@ -1,33 +1,70 @@
 """
-Main Streamlit application for Spark Pod Resource Monitor
+Main Streamlit application for Platform Monitor
+Enhanced with S3 storage monitoring and YAML-based configuration
 """
 import streamlit as st
-import yaml
 import logging
 from datetime import datetime, timedelta, date
+import os
 
 # Initialize logging and performance monitoring
 from logging_config import setup_logging, DatabaseError, KubernetesError, ValidationError
 from performance import get_performance_monitor, start_background_monitoring
+from config_loader import get_config
 
 # Set up logging
 logger = logging.getLogger(__name__)
 
-# Page config
-from config import (
-    PAGE_ICON,
-    PAGE_TITLE,
-    HISTORY_RETENTION_DAYS,
-    DEFAULT_API_SERVER,
-    DEFAULT_NAMESPACE,
-    DEFAULT_REFRESH_INTERVAL,
-    VIEW_MODES,
-    TIME_RANGES,
-    EXPORT_FORMATS,
-    LAYOUT,
-    ENABLE_PERFORMANCE_MONITORING,
-    PERFORMANCE_MONITORING_INTERVAL,
-)
+# Load configuration
+try:
+    config = get_config()
+    app_config = config.get('application', {})
+    k8s_config = config.get('kubernetes', {})
+    perf_config = config.get('performance', {})
+    s3_config = config.get('s3', {})
+    
+    # Application settings
+    PAGE_TITLE = app_config.get('title', 'Platform Monitor')
+    PAGE_ICON = app_config.get('icon', '🔥')
+    LAYOUT = app_config.get('layout', 'wide')
+    REFRESH_INTERVAL = app_config.get('refresh_interval', 30)
+    
+    # Feature flags
+    FEATURES = app_config.get('features', {})
+    KUBERNETES_MONITORING = FEATURES.get('kubernetes_monitoring', True)
+    S3_MONITORING = FEATURES.get('s3_monitoring', False)
+    PERFORMANCE_METRICS = FEATURES.get('performance_metrics', True)
+    
+    # Global settings (with fallbacks)
+    VIEW_MODES = config.get('view_modes', ['Current Status', 'Historical Analysis', 'Pod Timeline', 'Export Data'])
+    TIME_RANGES = config.get('time_ranges', [1, 2, 6, 12, 24, 48, 72])
+    EXPORT_FORMATS = config.get('export_formats', ['JSON', 'CSV'])
+    
+    # Kubernetes settings  
+    DEFAULT_API_SERVER = k8s_config.get('api_server', 'https://api.cluster.openshift.com:6443')
+    DEFAULT_NAMESPACE = k8s_config.get('namespace', 'spark-dev')
+    
+    # Performance settings
+    ENABLE_PERFORMANCE_MONITORING = perf_config.get('monitoring_enabled', False)
+    PERFORMANCE_MONITORING_INTERVAL = perf_config.get('monitoring_interval', 10)
+    
+    # Data retention
+    data_retention = config.get('data_retention', {})
+    HISTORY_RETENTION_DAYS = data_retention.get('history_days', 7)
+    
+except Exception as e:
+    logger.error(f"Error loading configuration: {e}")
+    # Fallback to default values
+    PAGE_TITLE = "Platform Monitor"
+    PAGE_ICON = "🔥"
+    LAYOUT = "wide"
+    REFRESH_INTERVAL = 30
+    VIEW_MODES = ['Current Status', 'Historical Analysis', 'Pod Timeline', 'Storage Monitor', 'Export Data']
+    DEFAULT_API_SERVER = "https://api.cluster.openshift.com:6443"
+    DEFAULT_NAMESPACE = "spark-dev"
+    KUBERNETES_MONITORING = True
+    S3_MONITORING = False
+    PERFORMANCE_METRICS = True
 
 st.set_page_config(page_title=PAGE_TITLE, page_icon=PAGE_ICON, layout=LAYOUT)
 
@@ -44,6 +81,26 @@ from utils import (
 from mock_data import generate_mock_pods, generate_mock_metrics
 from views.current_status import render_current_status
 from views.historical import render_historical, render_timeline
+
+# S3 monitoring imports (conditional)
+if S3_MONITORING:
+    try:
+        # Try relative imports first (when run as module)
+        try:
+            from .s3_adapter import S3Adapter
+            from .views.s3_views import S3Views
+        except ImportError:
+            # Fallback to direct imports (when run directly)
+            from s3_adapter import S3Adapter  
+            from views.s3_views import S3Views
+        S3_IMPORTS_AVAILABLE = True
+    except ImportError as e:
+        logger.warning(f"S3 monitoring disabled due to import error: {e}")
+        S3_IMPORTS_AVAILABLE = False
+        S3_MONITORING = False
+else:
+    S3_IMPORTS_AVAILABLE = False
+
 from validation import (
     validate_configuration,
     validate_namespace,
@@ -179,13 +236,16 @@ def main():
     retention_days = st.sidebar.slider("Data retention (days)", 1, 30, HISTORY_RETENTION_DAYS)
 
     auto_refresh = st.sidebar.checkbox("Auto-refresh", value=True)
-    refresh_interval = st.sidebar.slider("Refresh interval (seconds)", 10, 300, DEFAULT_REFRESH_INTERVAL)
+    refresh_interval = st.sidebar.slider("Refresh interval (seconds)", 10, 300, REFRESH_INTERVAL)
 
     demo_mode = st.sidebar.checkbox(
         "Use mock data (demo)", 
-        value=False, 
+        value=os.getenv('DEMO_MODE', '').lower() == 'true', 
         help="Populate UI with realistic sample Spark driver/executor pods and metrics without requiring a cluster token."
     )
+    
+    # Store demo mode in session state for use by other components
+    st.session_state['demo_mode'] = demo_mode
 
     # Configuration section
     st.sidebar.header("⚙️ Configuration")
@@ -344,6 +404,77 @@ def main():
         elif view_mode == "Pod Timeline":
             render_timeline(validated_config.get('namespace', namespace), history_manager)
             
+        elif view_mode == "Storage Monitor" and S3_MONITORING and S3_IMPORTS_AVAILABLE:
+            st.header("🗄️ S3 Storage Monitoring")
+            
+            # Initialize S3 adapter and views
+            if 's3_adapter' not in st.session_state:
+                try:
+                    # Check if we should use mock mode (same as general demo mode)
+                    s3_mock_mode = st.session_state.get('demo_mode', False)
+                    st.session_state.s3_adapter = S3Adapter(mock_mode=s3_mock_mode)
+                    logger.info(f"S3 adapter initialized (mock_mode: {s3_mock_mode})")
+                except Exception as e:
+                    logger.error(f"Failed to initialize S3 adapter: {e}")
+                    st.error(f"❌ Failed to initialize S3 monitoring: {e}")
+                    st.stop()
+            
+            if 's3_views' not in st.session_state:
+                st.session_state.s3_views = S3Views(st.session_state.s3_adapter)
+            
+            s3_adapter = st.session_state.s3_adapter
+            s3_views = st.session_state.s3_views
+            
+            # S3 monitoring controls
+            col1, col2, col3 = st.columns([2, 1, 1])
+            with col1:
+                st.write("Monitor S3 bucket utilization and storage metrics across configured buckets")
+                if s3_adapter.mock_mode:
+                    st.info("🧪 **Demo Mode**: Showing realistic mock S3 data for demonstration")
+            with col2:
+                if st.button("🔄 Refresh S3 Data"):
+                    s3_adapter.clear_cache()
+                    st.rerun()
+            with col3:
+                if st.button("📊 Generate New Mock Data") and s3_adapter.mock_mode:
+                    # Reset mock data generator to get new random values
+                    try:
+                        from .s3_mock_data import S3MockData
+                    except ImportError:
+                        from s3_mock_data import S3MockData
+                    s3_adapter.mock_generator = S3MockData()
+                    s3_adapter.clear_cache()
+                    st.rerun()
+            
+            # Render S3 monitoring views
+            try:
+                # Platform storage summary tiles
+                s3_views.render_platform_storage_tiles()
+                
+                st.markdown("---")
+                
+                # Individual bucket tiles
+                s3_views.render_bucket_utilization_tiles()
+                
+                st.markdown("---")
+                
+                # Storage utilization chart
+                s3_views.render_storage_utilization_chart()
+                
+                st.markdown("---")
+                
+                # Bucket selector with detailed view
+                s3_views.render_bucket_selector_details()
+                
+                st.markdown("---")
+                
+                # Detailed metrics table
+                s3_views.render_bucket_details_table()
+                
+            except Exception as e:
+                logger.error(f"Error rendering S3 views: {e}")
+                st.error(f"❌ Error displaying S3 monitoring: {e}")
+                
         elif view_mode == "Export Data":
             st.header("📤 Export Data")
             
