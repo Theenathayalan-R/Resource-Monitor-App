@@ -1,0 +1,147 @@
+# Example configuration file - copy to environments.yaml and customize
+environments:
+  development:
+    kubernetes:
+      api_server: "https://api.dev-cluster.your-company.com:6443"
+      namespace: "spark-dev"
+      tls_verify: false  # Disabled for development convenience
+      token_file: ""  # Empty means use kubeconfig
+    
+    database:
+      type: "sqlite"  # Use SQLite for development
+      sqlite:
+        path: "data/development/spark_pods_history_dev.db"
+        max_connections: 5
+      oracle:
+        host: "dev-oracle.your-company.com"
+        port: 1521
+        service_name: "DEVDB"
+        username: "spark_monitor_dev"
+        password: ""  # Set via ORACLE_PASSWORD environment variable
+        max_connections: 10
+    
+    application:
+      title: "Spark Pod Monitor - DEV"
+      icon: "🔥"
+      layout: "wide"
+      refresh_interval: 30
+      
+    performance:
+      monitoring_enabled: true
+      monitoring_interval: 10
+      thresholds:
+        cpu_warning: 70.0
+        cpu_critical: 90.0
+        memory_warning: 75.0
+        memory_critical: 90.0
+        response_time_warning: 2000.0
+        response_time_critical: 5000.0
+    
+    data_retention:
+      history_days: 3  # Short retention for development
+      
+    logging:
+      level: "DEBUG"  # Verbose logging for development
+      file: "logs/spark_monitor_dev.log"
+
+  staging:
+    kubernetes:
+      api_server: "https://api.staging-cluster.your-company.com:6443"
+      namespace: "spark-staging"
+      tls_verify: true
+      token_file: "/var/run/secrets/kubernetes.io/serviceaccount/token"
+    
+    database:
+      type: "oracle"  # Use Oracle for staging
+      sqlite:
+        path: "data/staging/spark_pods_history_staging.db"
+        max_connections: 5
+      oracle:
+        host: "staging-oracle.your-company.com"
+        port: 1521
+        service_name: "STAGINGDB"
+        username: "spark_monitor_staging"
+        password: ""  # Set via ORACLE_PASSWORD environment variable
+        max_connections: 15
+    
+    application:
+      title: "Spark Pod Monitor - STAGING"
+      icon: "🔥"
+      layout: "wide"
+      refresh_interval: 30
+      
+    performance:
+      monitoring_enabled: true
+      monitoring_interval: 10
+      thresholds:
+        cpu_warning: 70.0
+        cpu_critical: 90.0
+        memory_warning: 75.0
+        memory_critical: 90.0
+        response_time_warning: 1500.0  # Stricter than dev
+        response_time_critical: 3000.0
+    
+    data_retention:
+      history_days: 7
+      
+    logging:
+      level: "INFO"
+      file: "logs/spark_monitor_staging.log"
+
+  production:
+    kubernetes:
+      api_server: "https://api.prod-cluster.your-company.com:6443"
+      namespace: "spark-production"
+      tls_verify: true  # Always enabled for production
+      token_file: "/var/run/secrets/kubernetes.io/serviceaccount/token"
+    
+    database:
+      type: "oracle"  # Oracle for production performance and reliability
+      sqlite:
+        path: "data/production/spark_pods_history_prod.db"
+        max_connections: 5
+      oracle:
+        host: "prod-oracle.your-company.com"
+        port: 1521
+        service_name: "PRODDB"
+        username: "spark_monitor"
+        password: ""  # MUST be set via ORACLE_PASSWORD environment variable
+        max_connections: 20
+    
+    application:
+      title: "Spark Pod Monitor - PRODUCTION"
+      icon: "🔥"
+      layout: "wide"
+      refresh_interval: 60  # Less frequent refreshes in production
+      
+    performance:
+      monitoring_enabled: true
+      monitoring_interval: 15  # More frequent monitoring
+      thresholds:
+        cpu_warning: 60.0      # More conservative thresholds
+        cpu_critical: 85.0
+        memory_warning: 70.0
+        memory_critical: 85.0
+        response_time_warning: 1000.0   # Strict performance requirements
+        response_time_critical: 2500.0
+    
+    data_retention:
+      history_days: 30  # Longer retention for production
+      
+    logging:
+      level: "INFO"  # Less verbose logging in production
+      file: "logs/spark_monitor_prod.log"
+
+# Global settings applied to all environments unless overridden
+global:
+  view_modes:
+    - "Current Status"
+    - "Historical Analysis"
+    - "Pod Timeline"
+    - "Export Data"
+  
+  time_ranges: [1, 2, 6, 12, 24, 48, 72]
+  
+  export_formats:
+    - "JSON"
+    - "CSV"

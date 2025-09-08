@@ -1,0 +1,294 @@
+environments:
+  development:
+    kubernetes:
+      api_server: "https://api.dev-cluster.openshift.com:6443"
+      namespace: "spark-dev"
+      tls_verify: false
+      token_file: ""  # Will use kubeconfig
+    
+    database:
+      type: "sqlite"  # sqlite or oracle
+      # SQLite configuration
+      sqlite:
+        path: "spark_pods_history_dev.db"
+        max_connections: 5
+      # Oracle configuration
+      oracle:
+        host: "dev-oracle.company.com"
+        port: 1521
+        service_name: "DEVDB"
+        username: "spark_monitor_dev"
+        password: ""  # Will be read from environment
+        max_connections: 10
+    
+    # S3 Storage monitoring configuration
+    s3:
+      enabled: true
+      # Global S3 settings (can be overridden per bucket)
+      default_endpoint_url: ""  # Default endpoint for all buckets
+      default_access_key_id: ""  # Default access key (can be overridden per bucket)
+      default_secret_access_key: ""  # Default secret key (can be overridden per bucket)
+      
+      # Individual bucket configurations with optional per-bucket credentials
+      buckets:
+        - name: "spark-data-dev"
+          display_name: "Spark Data (Dev)"
+          quota_gb: 100
+          alert_threshold: 80  # Alert at 80% utilization
+          # Optional: per-bucket S3 credentials
+          endpoint_url: "https://s3-spark-data.company.local:9000"
+          access_key_id: ""  # Will read from SPARK_DATA_ACCESS_KEY_ID env var
+          secret_access_key: ""  # Will read from SPARK_DATA_SECRET_KEY env var
+          
+        - name: "spark-logs-dev"
+          display_name: "Spark Logs (Dev)"
+          quota_gb: 50
+          alert_threshold: 75
+          endpoint_url: "https://s3-logs.company.local:9000"
+          access_key_id: ""  # Will read from SPARK_LOGS_ACCESS_KEY_ID env var
+          secret_access_key: ""  # Will read from SPARK_LOGS_SECRET_KEY env var
+          
+        - name: "shared-storage-dev"
+          display_name: "Shared Storage (Dev)"
+          quota_gb: 200
+          alert_threshold: 85
+          endpoint_url: "https://s3-shared.company.local:9000"
+          access_key_id: ""  # Will read from SHARED_STORAGE_ACCESS_KEY_ID env var
+          secret_access_key: ""  # Will read from SHARED_STORAGE_SECRET_KEY env var
+    
+    application:
+      title: "Platform Monitor - DEV"
+      icon: "🔥"
+      layout: "wide"
+      refresh_interval: 30
+      features:
+        kubernetes_monitoring: true
+        s3_monitoring: true
+        performance_metrics: true
+        
+    performance:
+      monitoring_enabled: true
+      monitoring_interval: 10
+      thresholds:
+        cpu_warning: 70.0
+        cpu_critical: 90.0
+        memory_warning: 75.0
+        memory_critical: 90.0
+        response_time_warning: 2000.0
+        response_time_critical: 5000.0
+    
+    data_retention:
+      history_days: 3
+      
+    logging:
+      level: "DEBUG"
+      file: "logs/platform_monitor_dev.log"
+
+  staging:
+    kubernetes:
+      api_server: "https://api.staging-cluster.openshift.com:6443"
+      namespace: "spark-staging"
+      tls_verify: true
+      token_file: "/var/run/secrets/kubernetes.io/serviceaccount/token"
+    
+    database:
+      type: "oracle"
+      sqlite:
+        path: "spark_pods_history_staging.db"
+        max_connections: 5
+      oracle:
+        host: "staging-oracle.company.com"
+        port: 1521
+        service_name: "STAGINGDB"
+        username: "spark_monitor_staging"
+        password: ""  # Will be read from environment
+        max_connections: 15
+    
+    # S3 Storage monitoring configuration
+    s3:
+      enabled: true
+      default_endpoint_url: "https://s3-primary.staging.company.local:9000"
+      default_access_key_id: ""  # Default staging access key
+      default_secret_access_key: ""  # Default staging secret key
+      
+      buckets:
+        - name: "spark-data-staging"
+          display_name: "Spark Data (Staging)"
+          quota_gb: 500
+          alert_threshold: 85
+          # Uses default staging credentials and endpoint
+          
+        - name: "spark-logs-staging"
+          display_name: "Spark Logs (Staging)"
+          quota_gb: 200
+          alert_threshold: 80
+          endpoint_url: "https://s3-logs.staging.company.local:9000"
+          access_key_id: ""  # STAGING_LOGS_ACCESS_KEY_ID
+          secret_access_key: ""  # STAGING_LOGS_SECRET_KEY
+          
+        - name: "platform-backups-staging"
+          display_name: "Platform Backups (Staging)"
+          quota_gb: 1000
+          alert_threshold: 90
+          endpoint_url: "https://s3-backups.staging.company.local:9000"
+          access_key_id: ""  # STAGING_BACKUP_ACCESS_KEY_ID
+          secret_access_key: ""  # STAGING_BACKUP_SECRET_KEY
+          
+        - name: "ml-models-staging"
+          display_name: "ML Models (Staging)"
+          quota_gb: 300
+          alert_threshold: 85
+          # Uses default staging credentials
+          
+        - name: "analytics-staging"
+          display_name: "Analytics Data (Staging)"
+          quota_gb: 800
+          alert_threshold: 90
+    
+    application:
+      title: "Platform Monitor - STAGING"
+      icon: "⚡"
+      layout: "wide"
+      refresh_interval: 30
+      features:
+        kubernetes_monitoring: true
+        s3_monitoring: true
+        performance_metrics: true
+      
+    performance:
+      monitoring_enabled: true
+      monitoring_interval: 10
+      thresholds:
+        cpu_warning: 70.0
+        cpu_critical: 90.0
+        memory_warning: 75.0
+        memory_critical: 90.0
+        response_time_warning: 1500.0
+        response_time_critical: 3000.0
+    
+    data_retention:
+      history_days: 7
+      
+    logging:
+      level: "INFO"
+      file: "logs/spark_monitor_staging.log"
+
+  production:
+    kubernetes:
+      api_server: "https://api.prod-cluster.openshift.com:6443"
+      namespace: "spark-production"
+      tls_verify: true
+      token_file: "/var/run/secrets/kubernetes.io/serviceaccount/token"
+    
+    database:
+      type: "oracle"
+      sqlite:
+        path: "spark_pods_history_prod.db"
+        max_connections: 5
+      oracle:
+        host: "prod-oracle.company.com"
+        port: 1521
+        service_name: "PRODDB"
+        username: "spark_monitor"
+        password: ""  # Will be read from environment
+        max_connections: 20
+    
+    # S3 Storage monitoring configuration
+    s3:
+      enabled: true
+      default_endpoint_url: "https://s3-primary.prod.company.local:9000"
+      default_access_key_id: ""  # Default production access key
+      default_secret_access_key: ""  # Default production secret key
+      
+      buckets:
+        - name: "spark-data-production"
+          display_name: "Spark Data (Prod)"
+          quota_gb: 2000
+          alert_threshold: 90
+          # Uses default production credentials
+          
+        - name: "spark-logs-production"
+          display_name: "Spark Logs (Prod)"
+          quota_gb: 1000
+          alert_threshold: 85
+          endpoint_url: "https://s3-logs.prod.company.local:9000"
+          access_key_id: ""  # PROD_LOGS_ACCESS_KEY_ID
+          secret_access_key: ""  # PROD_LOGS_SECRET_KEY
+          
+        - name: "platform-backups-production"
+          display_name: "Platform Backups (Prod)"
+          quota_gb: 5000
+          alert_threshold: 95
+          endpoint_url: "https://s3-backups.prod.company.local:9000"
+          access_key_id: ""  # PROD_BACKUP_ACCESS_KEY_ID
+          secret_access_key: ""  # PROD_BACKUP_SECRET_KEY
+          
+        - name: "data-lake-production"
+          display_name: "Data Lake (Prod)"
+          quota_gb: 10000
+          alert_threshold: 95
+          endpoint_url: "https://s3-datalake.prod.company.local:9000"
+          access_key_id: ""  # PROD_DATALAKE_ACCESS_KEY_ID
+          secret_access_key: ""  # PROD_DATALAKE_SECRET_KEY
+          
+        - name: "ml-models-production"
+          display_name: "ML Models (Prod)"
+          quota_gb: 500
+          alert_threshold: 85
+          # Uses default production credentials
+          
+        - name: "analytics-production"
+          display_name: "Analytics Data (Prod)"
+          quota_gb: 3000
+          alert_threshold: 90
+          
+        - name: "customer-data-production"
+          display_name: "Customer Data (Prod)"
+          quota_gb: 1500
+          alert_threshold: 95
+          endpoint_url: "https://s3-customer.prod.company.local:9000"
+          access_key_id: ""  # PROD_CUSTOMER_ACCESS_KEY_ID
+          secret_access_key: ""  # PROD_CUSTOMER_SECRET_KEY
+    
+    application:
+      title: "Platform Monitor - PRODUCTION"
+      icon: "�"
+      layout: "wide"
+      refresh_interval: 60
+      features:
+        kubernetes_monitoring: true
+        s3_monitoring: true
+        performance_metrics: true
+      
+    performance:
+      monitoring_enabled: true
+      monitoring_interval: 15
+      thresholds:
+        cpu_warning: 60.0
+        cpu_critical: 85.0
+        memory_warning: 70.0
+        memory_critical: 85.0
+        response_time_warning: 1000.0
+        response_time_critical: 2500.0
+    
+    data_retention:
+      history_days: 30
+      
+    logging:
+      level: "INFO"
+      file: "logs/spark_monitor_prod.log"
+
+# Global settings (apply to all environments unless overridden)
+global:
+  view_modes:
+    - "Current Status"
+    - "Historical Analysis"
+    - "Pod Timeline"
+    - "Storage Monitor"
+    - "Export Data"
+  
+  time_ranges: [1, 2, 6, 12, 24, 48, 72]
+  
+  export_formats:
+    - "JSON"
+    - "CSV"

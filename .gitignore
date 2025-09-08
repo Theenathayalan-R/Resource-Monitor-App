@@ -156,7 +156,6 @@ monitoring_*.json
 # Kubernetes config files (sensitive)
 kubeconfig
 .kube/
-config
 *.kubeconfig
 
 # Application configuration (may contain secrets)
